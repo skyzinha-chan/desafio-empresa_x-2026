@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambientes Virtuais
+venv/
+.venv/
+env/
+
+# Configurações e Segredos
+.env
+.vscode/
+.idea/
+
+# CSV/Data (Muito importante pelo volume de dados)
+data/*.csv
+data/*.zip
+data/*.xlsx
+data/*.txt
+!data/.gitkeep
+
+# Node (Frontend)
+node_modules/
+dist/
+*.log
+
+# Docker/OS
+.DS_Store
+Thumbs.db

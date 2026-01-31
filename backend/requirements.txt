@@ -1,0 +1,17 @@
+# --- Framework Web & Servidor ---
+fastapi==0.109.0        # Framework moderno para construção de APIs rápidas
+uvicorn==0.27.0        # Servidor ASGI de alta performance para rodar o FastAPI
+
+# --- Processamento de Dados & ETL ---
+pandas==2.2.0           # Manipulação e análise de dados (essencial para os CSVs da ANS)
+requests==2.31.0        # Realização de requisições HTTP (para baixar os ZIPs da API)
+openpyxl==3.1.2         # Suporte para leitura/escrita de arquivos Excel (.xlsx)
+
+# --- Banco de Dados & ORM ---
+sqlalchemy==2.0.25      # Toolkit SQL e ORM para mapeamento de tabelas
+psycopg2-binary==2.9.9  # Driver de conexão para bancos de dados PostgreSQL
+
+# --- Validação & Configurações ---
+pydantic==2.5.3         # Validação de dados e definição de schemas (Data Integrity)
+pydantic-settings==2.1.0 # Gestão de variáveis de ambiente integrada ao Pydantic
+python-dotenv==1.0.1    # Carregamento de variáveis de ambiente a partir do arquivo .env
