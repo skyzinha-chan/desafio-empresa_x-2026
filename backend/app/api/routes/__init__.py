@@ -1,70 +1,170 @@
-# Serve para testarmos se o FastAPI está "enxergando" a nossa estrutura de pastas
-# /backend/app/api/routes/__init__.py
+from fastapi import APIRouter, HTTPException, Query
+import sqlite3
 import os
-import pandas as pd
-from fastapi import APIRouter, Query
 from typing import Optional, List
 
 router = APIRouter()
 
-# Pega o caminho da pasta onde o projeto está (empresa-x-teste)
-# Pega o caminho absoluto da pasta 'backend'
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))  # .../routes
-BACKEND_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "..", "..", ".."))
-
-# A pasta 'data' está no mesmo nível da pasta 'backend', então subimos um nível a partir de BACKEND_DIR
-PROJ_ROOT = os.path.dirname(BACKEND_DIR)
-CSV_PATH = os.path.join(PROJ_ROOT, "data", "consolidado_despesas.csv")
+# --- CONFIGURAÇÃO DE CAMINHOS ---
+# backend/app/api/routes/ -> backend/app/api/ -> backend/app/ -> backend/ -> data/
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.abspath(os.path.join(
+    CURRENT_DIR, "../../../../data/empresa_x.db"))
 
 
-@router.get("/health", tags=["Health"])
+def get_db_connection():
+    """Abre conexão com o SQLite e retorna linhas como dicionários."""
+    if not os.path.exists(DB_PATH):
+        raise HTTPException(
+            status_code=500,
+            detail="Banco de dados não encontrado. Certifique-se de ter rodado o ETL (Step 3)."
+        )
+    conn = sqlite3.connect(DB_PATH)
+    # Permite acessar colunas pelo nome (row['nome'])
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@router.get("/health", tags=["System"])
 async def health_check():
+    """Verifica se a API está online."""
+    return {"status": "healthy", "database": "connected" if os.path.exists(DB_PATH) else "missing"}
+
+# --- ROTA 1: Listar Operadoras (Busca + Paginação) ---
+
+
+@router.get("/operadoras", tags=["Operadoras"])
+async def listar_operadoras(
+    search: Optional[str] = Query(
+        None, description="Buscar por Razão Social ou CNPJ"),
+    page: int = Query(1, ge=1, description="Número da página"),
+    limit: int = Query(10, ge=1, le=100, description="Itens por página")
+):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    offset = (page - 1) * limit
+
+    # Query Base
+    base_query = "FROM operadoras"
+    where_clause = ""
+    params = []
+
+    # Filtro de Busca
+    if search:
+        where_clause = " WHERE razao_social LIKE ? OR cnpj LIKE ?"
+        term = f"%{search}%"
+        params.extend([term, term])
+
+    # Contagem Total (para paginação)
+    cursor.execute(f"SELECT COUNT(*) {base_query} {where_clause}", params)
+    total_records = cursor.fetchone()[0]
+
+    # Busca de Dados Paginados
+    sql = f"""
+        SELECT cnpj, razao_social, uf, modalidade 
+        {base_query} {where_clause}
+        ORDER BY razao_social 
+        LIMIT ? OFFSET ?
     """
-    Verifica o status da API.
-    """
+    params.extend([limit, offset])
+
+    cursor.execute(sql, params)
+    operadoras = [dict(row) for row in cursor.fetchall()]
+
+    conn.close()
+
     return {
-        "status": "healthy",
-        "service": "empresa-x-analytics",
-        "version": "1.0.0"
+        "data": operadoras,
+        "meta": {
+            "total": total_records,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total_records + limit - 1) // limit
+        }
     }
 
+# --- ROTA 2: Detalhes e Histórico da Operadora ---
 
-@router.get("/despesas", tags=["Analytics"])
-async def get_despesas(
-    cnpj: Optional[str] = Query(None, description="Filtrar por CNPJ"),
-    ano: Optional[int] = Query(None, description="Filtrar por Ano"),
-    page: int = Query(1, ge=1, description="Número da página"),
-    per_page: int = Query(20, le=100, description="Registros por página")
-):
-    # Log para debug (aparecerá no seu terminal)
-    print(f"🔍 Buscando dados em: {CSV_PATH}")
 
-    if not os.path.exists(CSV_PATH):
-        return {
-            "error": "Dados consolidados não encontrados.",
-            "detalhes": f"O sistema buscou em: {CSV_PATH}. Verifique se o arquivo CSV existe nesta pasta."
-        }
+@router.get("/operadoras/{cnpj}/despesas", tags=["Operadoras"])
+async def obter_detalhes_operadora(cnpj: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-    # Lendo o CSV (usando sep=';' conforme gerado pelo seu DataProcessor)
+    # 1. Dados Cadastrais
+    op = cursor.execute(
+        "SELECT * FROM operadoras WHERE cnpj = ?", (cnpj,)).fetchone()
+    if not op:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Operadora não encontrada")
+
+    # 2. Histórico de Despesas
+    cursor.execute("""
+        SELECT ano, trimestre, valor_despesa 
+        FROM despesas 
+        WHERE cnpj_operadora = ? 
+        ORDER BY ano DESC, trimestre DESC
+    """, (cnpj,))
+
+    despesas = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return {
+        "operadora": dict(op),
+        "despesas": despesas
+    }
+
+# --- ROTA 3: Estatísticas Gerais (Dashboard) ---
+
+
+@router.get("/estatisticas", tags=["Dashboard"])
+async def obter_estatisticas():
+    """
+    Retorna KPIs gerais para o Dashboard (Item 4.2 do desafio).
+    Trade-off: Calculado em tempo real (Query Direta). Para volumes maiores, usaríamos cache.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
     try:
-        df = pd.read_csv(CSV_PATH, sep=';', encoding='utf-8-sig', dtype={'CNPJ': str})
-        
-        # Filtros
-        if cnpj:
-            df = df[df['CNPJ'] == cnpj]
-        if ano:
-            df = df[df['ANO'] == ano]
+        # KPI 1: Total de Despesas no período
+        cursor.execute("SELECT SUM(valor_despesa) FROM despesas")
+        total_geral = cursor.fetchone()[0] or 0
 
-        # Lógica de Paginação
-        start = (page - 1) * per_page
-        end = start + per_page
+        # KPI 2: Média por Trimestre
+        cursor.execute("SELECT AVG(valor_despesa) FROM despesas")
+        media_geral = cursor.fetchone()[0] or 0
+
+        # KPI 3: Top 5 Operadoras com maiores despesas
+        cursor.execute("""
+            SELECT o.razao_social, o.uf, SUM(d.valor_despesa) as total
+            FROM despesas d
+            JOIN operadoras o ON d.cnpj_operadora = o.cnpj
+            GROUP BY o.cnpj
+            ORDER BY total DESC
+            LIMIT 5
+        """)
+        top_5 = [dict(row) for row in cursor.fetchall()]
+
+        # KPI 4: Distribuição por UF (Top 5 Estados)
+        cursor.execute("""
+            SELECT o.uf, SUM(d.valor_despesa) as total
+            FROM despesas d
+            JOIN operadoras o ON d.cnpj_operadora = o.cnpj
+            GROUP BY o.uf
+            ORDER BY total DESC
+            LIMIT 5
+        """)
+        top_ufs = [dict(row) for row in cursor.fetchall()]
 
         return {
-            "total_records": len(df),
-            "page": page,
-            "per_page": per_page,
-            "data": df.iloc[start:end].to_dict(orient="records")
+            "kpis": {
+                "total_despesas": total_geral,
+                "media_por_lancamento": media_geral
+            },
+            "top_operadoras": top_5,
+            "distribuicao_uf": top_ufs
         }
-    except Exception as e:
-        return {"error": f"Erro interno ao ler processar os dados: {str(e)}"}
-# Note que exportamos o router para ser incluído no main.py
+    finally:
+        conn.close()
