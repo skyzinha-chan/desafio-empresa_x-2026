@@ -15,3 +15,4 @@ psycopg2-binary>=2.9.9  # Driver de conexão para bancos de dados PostgreSQL
 pydantic>=2.9.0         # Validação de dados e definição de schemas (Data Integrity)
 pydantic-settings>=2.5.0 # Gestão de variáveis de ambiente integrada ao Pydantic
 python-dotenv>=1.0.1    # Carregamento de variáveis de ambiente a partir do arquivo .env
+beautifulsoup4>=4.12.0 # Extração de links e raspagem de dados
