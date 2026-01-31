@@ -70,6 +70,21 @@ class Step2Transformation:
         df_merged['UF'] = df_merged['UF'].fillna("N/I")
         df_merged['MODALIDADE'] = df_merged['MODALIDADE'].fillna("DESCONHECIDA")
 
+        # 6.1. Atualizar o consolidado com dados reais de 14 dígitos (Mão na massa!)
+        # Isso garante que o banco de dados (Etapa 3) consiga ligar as tabelas corretamente.
+        print("💾 Atualizando consolidado com CNPJs de 14 dígitos e Nomes Reais...")
+
+        # Substituímos as colunas originais pelas enriquecidas do CADOP
+        df_merged['CNPJ'] = df_merged['CNPJ_FINAL']
+        df_merged['RAZAOSOCIAL'] = df_merged['RAZAO_FINAL']
+
+        # Sobrescrevemos o arquivo CSV que o Banco de Dados (Step 3) vai ler
+        # Mantendo as colunas exigidas no item 1.3 do desafio
+        cols_finais_consolidado = [
+            'CNPJ', 'RAZAOSOCIAL', 'ANO', 'TRIMESTRE', 'VALORDESPESAS']
+        df_merged[cols_finais_consolidado].to_csv(
+            input_csv, index=False, sep=';', encoding='utf-8-sig')
+
         # 7. Agregação (Item 2.3)
         print("📊 Calculando Estatísticas...")
         df_merged['VALORDESPESAS'] = pd.to_numeric(df_merged['VALORDESPESAS'], errors='coerce').fillna(0)

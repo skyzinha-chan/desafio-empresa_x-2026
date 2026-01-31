@@ -30,31 +30,48 @@ class Step3DBIngestion:
         # 2. Criar Tabelas (DDL)
         # Adaptado para SQLite (Postgres usaria SERIAL em vez de AUTOINCREMENT)
         cursor.executescript("""
+            -- 1. Tabela Dimensão: Operadoras
             CREATE TABLE IF NOT EXISTS operadoras (
-                cnpj TEXT PRIMARY KEY,
                 registro_ans TEXT,
+                cnpj TEXT PRIMARY KEY,
                 razao_social TEXT,
+                nome_fantasia TEXT,
+                modalidade TEXT,
+                logradouro TEXT,
+                numero TEXT,
+                complemento TEXT,
+                bairro TEXT,
+                cidade TEXT,
                 uf TEXT,
-                modalidade TEXT
+                cep TEXT,
+                telefone TEXT,
+                email TEXT,
+                data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
-            CREATE TABLE IF NOT EXISTS despesas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cnpj_operadora TEXT,
-                ano INTEGER,
-                trimestre INTEGER,
-                valor_despesa REAL,
-                FOREIGN KEY(cnpj_operadora) REFERENCES operadoras(cnpj)
-            );
-            
+            CREATE INDEX IF NOT EXISTS idx_ops_razao ON operadoras(razao_social);
             CREATE INDEX IF NOT EXISTS idx_ops_uf ON operadoras(uf);
+
+            -- 2. Tabela Fato: Despesas Financeiras
+            CREATE TABLE IF NOT EXISTS despesas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, -- Ajustado: SQLite usa AUTOINCREMENT, não SERIAL
+                cnpj_operadora TEXT,
+                ano INTEGER NOT NULL,
+                trimestre INTEGER NOT NULL,
+                valor_despesa REAL, -- Ajustado: SQLite usa REAL para valores decimais
+                data_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (cnpj_operadora) REFERENCES operadoras(cnpj)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_despesas_periodo ON despesas(ano, trimestre);
+            CREATE INDEX IF NOT EXISTS idx_despesas_valor ON despesas(valor_despesa);
         """)
         conn.commit()
 
         # 3. Inserir Operadoras (Dimensão)
         print("📚 Inserindo Operadoras...")
         try:
-            # Lendo CADOP com tratamento de encoding para corrigir o "SAÃDE"
+            # Lendo CADOP com tratamento de encoding para corrigir o "SAÚDE"
             try:
                 cadop = pd.read_csv(cls.FILE_CADOP, sep=';', encoding='utf-8', dtype=str, quotechar='"')
             except:
