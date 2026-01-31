@@ -1,15 +1,18 @@
 import os
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+import zipfile
+import pandas as pd
 from dotenv import load_dotenv
+
+# Importação relativa para os módulos vizinhos
+from ans_scrapper import ANSScraper
+from data_processor import DataProcessor
 
 load_dotenv()  # Carrega as variáveis do .env
 
 
 class ANSService:
     """
-    Serviço responsável pela ingestão de dados do Portal de Dados Abertos da ANS.
+    Serviço Orquestrador: Centraliza configurações e coordena o fluxo ETL.
     """
 
     # Buscamos do .env. Se não existir, usamos uma string vazia como fallback
@@ -17,143 +20,77 @@ class ANSService:
     DATA_DIR = os.path.abspath(os.path.join(
         os.path.dirname(__file__), "../../../data"))
 
-    # Headers para simular um navegador e evitar bloqueios
-    HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
 
     @classmethod
-    def _get_soup(cls, url):
+    def consolidar_e_analisar(cls, lista_dfs):
         """
-        Retorna um objeto BeautifulSoup para a URL fornecida.
+        Consolida os dados, trata inconsistências e gera o ZIP final (Item 1.3).
         """
-        try:
-            response = requests.get(url, headers=cls.HEADERS, timeout=15)
-            response.raise_for_status()
-            return BeautifulSoup(response.text, 'html.parser')
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Erro de conexão ao aceder a {url}: {e}")
-            raise
+        if not lista_dfs:
+            print("⚠️ Sem dados para consolidar.")
+            return
 
+        print("\n📊 Iniciando consolidação e análise de inconsistências...")
 
-    @classmethod
-    def identificar_arquivos_trimestrais(cls):
-        """
-        Identifica os arquivos trimestrais mais recentes disponíveis no portal da ANS.
-        """
-        print(f"📂 Explorando portal ANS: {cls.BASE_URL}")
-        try:
-            soup = cls._get_soup(cls.BASE_URL)
+        # 1. Juntar todos os DataFrames
+        df_final = pd.concat(lista_dfs, ignore_index=True)
 
-            # 1. Identificar anos (Ex: 2025, 2024...)
-            links_raiz = [a['href'] for a in soup.find_all('a', href=True)]
-            anos = sorted([l for l in links_raiz if l.strip(
-                '/').isdigit() and len(l.strip('/')) == 4], reverse=True)
+        # --- TRATAMENTO DE INCONSISTÊNCIAS ---
 
-            arquivos_para_baixar = []
-
-            for ano in anos:
-                if len(arquivos_para_baixar) >= 3:
-                    break
-
-                url_ano = urljoin(cls.BASE_URL, ano)
-                if not url_ano.endswith('/'):
-                    url_ano += '/'
-
-                print(f"  📂 Acedendo ano: {ano.strip('/')}")
-
-                try:
-                    soup_ano = cls._get_soup(url_ano)
-                    links_ano = soup_ano.find_all('a', href=True)
-
-                    # Procura ZIPs que contenham 'T' (ex: 1T2025.zip) diretamente no ano
-                    zips = sorted([
-                        urljoin(url_ano, l['href'])
-                        for l in links_ano if l['href'].lower().endswith('.zip') and 'T' in l['href'].upper()
-                    ], reverse=True)
-
-                    for z in zips:
-                        if len(arquivos_para_baixar) >= 3:
-                            break
-                        arquivos_para_baixar.append(z)
-                        print(
-                            f"    ✅ Arquivo identificado: {z.split('/')[-1]}")
-
-                    # Se não achou 3, tenta subpastas (Resiliência)
-                    if len(arquivos_para_baixar) < 3:
-                        subpastas = [l['href'] for l in links_ano if l['href'].endswith(
-                            '/') and not l['href'].startswith('.')]
-                        for sub in sorted(subpastas, reverse=True):
-                            if len(arquivos_para_baixar) >= 3:
-                                break
-
-                            url_sub = urljoin(url_ano, sub)
-                            print(
-                                f"    🔍 Explorando subpasta: {sub.strip('/')}")
-                            try:
-                                soup_sub = cls._get_soup(url_sub)
-                                zips_sub = [urljoin(url_sub, z['href']) for z in soup_sub.find_all(
-                                    'a', href=True) if z['href'].lower().endswith('.zip')]
-                                for zs in zips_sub:
-                                    if len(arquivos_para_baixar) >= 3:
-                                        break
-                                    arquivos_para_baixar.append(zs)
-                                    print(
-                                        f"      ✅ Arquivo encontrado: {zs.split('/')[-1]}")
-                            except Exception as e:
-                                print(
-                                    f"      ⚠️ Falha ao explorar subpasta {sub}: {e}")
-
-                except Exception as e:
-                    print(f"    ⚠️ Falha ao processar o ano {ano}: {e}")
-                    continue
-
-            return arquivos_para_baixar[:3]
-
-        except Exception as e:
-            print(f"💥 Erro crítico na identificação dos trimestres: {e}")
-            return []
-
-    
-    @classmethod
-    def baixar_arquivos(cls, urls):
-        """
-        Realiza o download dos arquivos identificados para a pasta data/.
-        """
-        if not urls:
-            print("⚠️ Nenhuma URL encontrada para download.")
-            return []
-        
-        if not os.path.exists(cls.DATA_DIR):
-            os.makedirs(cls.DATA_DIR)
-
-        baixados = []
-        for url in urls:
-            nome_arquivo = url.split("/")[-1]
-            caminho_local = os.path.join(cls.DATA_DIR, nome_arquivo)
-
-            try:
-                print(f"📥 Baixando: {nome_arquivo}...")
-                # Stream=True para lidar com ficheiros grandes sem estourar a RAM
-                with requests.get(url, stream=True, headers=cls.HEADERS, timeout=30) as r:
-                    r.raise_for_status()
-                    with open(caminho_local, 'wb') as f:
-                        # 1MB chunks
-                        for chunk in r.iter_content(chunk_size=1024 * 1024):
-                            if chunk:
-                                f.write(chunk)
-                baixados.append(caminho_local)
-                print(f"    💾 Guardado em: data/{nome_arquivo}")
-            except Exception as e:
-                print(f"❌ Falha ao baixar {nome_arquivo}: {e}")
-
+        # A. Tratar Valores (Ignorar ou corrigir negativos/zerados)
+        # Decisão técnica: Converter para numérico e filtrar apenas > 0
+        df_final['VALORDESPESAS'] = pd.to_numeric(
+            df_final['VALORDESPESAS'], errors='coerce').fillna(0)
+        iniciais = len(df_final)
+        df_final = df_final[df_final['VALORDESPESAS'] > 0]
         print(
-            f"\n✨ Processo finalizado: {len(baixados)} ficheiros na pasta /data.")
-        return baixados
+            f"  🧹 Valores: Removidas {iniciais - len(df_final)} linhas com valores inválidos ou <= 0.")
+
+        # B. Tratar CNPJs e Razão Social (Conflitos)
+        # Decisão: Manter a primeira Razão Social encontrada para cada CNPJ (Padronização)
+        df_final = df_final.sort_values(by=['CNPJ', 'RAZAOSOCIAL'])
+        df_final['RAZAOSOCIAL'] = df_final.groupby(
+            'CNPJ')['RAZAOSOCIAL'].transform('first')
+
+        # C. Remover Duplicados Reais (Mesmo CNPJ, Ano, Trimestre e Valor)
+        df_final = df_final.drop_duplicates()
+
+        # 2. Gerar o CSV Final
+        csv_path = os.path.join(cls.DATA_DIR, "consolidado_despesas.csv")
+        df_final.to_csv(csv_path, index=False, sep=';', encoding='utf-8-sig')
+
+        # 3. Compactar em ZIP (conforme pedido)
+        zip_final_path = os.path.join(cls.DATA_DIR, "consolidado_despesas.zip")
+        with zipfile.ZipFile(zip_final_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            z.write(csv_path, arcname="consolidado_despesas.csv")
+
+        print(f"✅ Arquivo final gerado: {zip_final_path}")
+        return zip_final_path
 
             
 # Exemplo simples para teste manual
 if __name__ == "__main__":
-    service = ANSService()
-    lista_de_urls = service.identificar_arquivos_trimestrais()
-    service.baixar_arquivos(lista_de_urls)
+    # 1. Identificar (Passamos a URL como argumento)
+    urls = ANSScraper.identificar_arquivos_trimestrais(ANSService.BASE_URL)
+
+    if urls:
+        # 2. Baixar (Passamos a pasta de destino como argumento)
+        caminhos_zips = ANSScraper.baixar_arquivos(urls, ANSService.DATA_DIR)
+
+        if caminhos_zips:
+            print("\n🧪 Iniciando processamento dos dados...")
+            # 3. Processar (Passamos a pasta de dados para o processador saber onde criar a temp)
+            lista_dataframes = DataProcessor.processar_e_normalizar(
+                caminhos_zips, ANSService.DATA_DIR)
+
+            if lista_dataframes:
+                # 4. Consolidar via SERVICE (onde a função ficou)
+                ANSService.consolidar_e_analisar(lista_dataframes)
+                print(
+                    f"✅ Sucesso: {len(lista_dataframes)} arquivos de despesas foram carregados na memória.")
+                # Aqui você já tem os dados prontos para a Consolidação (Item 1.3)
+            else:
+                print(
+                    "⚠️ Nenhum arquivo de despesas/sinistros foi encontrado dentro dos ZIPs.")
+    else:
+        print("❌ Não foi possível encontrar os links para download.")   
