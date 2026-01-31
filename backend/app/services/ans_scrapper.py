@@ -2,10 +2,11 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import os
+import time
 
 class ANSScraper:
     """
-    Serviço responsável por identificar e baixar arquivos trimestrais do Portal de Dados Abertos da ANS.
+    Serviço responsável por interagir com o portal da ANS e baixar arquivos.
     """
 
     # Headers para simular um navegador e evitar bloqueios
@@ -104,6 +105,58 @@ class ANSScraper:
             print(f"💥 Erro crítico na identificação dos trimestres: {e}")
             return []
 
+
+    @classmethod
+    def baixar_cadop(cls, data_dir, url_base_cadop):
+        """
+            Baixa o arquivo CSV contendo os dados cadastrais (CNPJ, Razão Social) das operadoras ativas.
+            """
+        if not os.path.exists(data_dir):
+                os.makedirs(data_dir)
+
+        print(f"\n🔍 Acessando diretório do CADOP: {url_base_cadop}")
+
+        try:
+            # 1. Acessa a pasta para ver o que tem dentro
+            soup = cls._get_soup(url_base_cadop)
+
+            # 2. Procura links que terminam em .csv (ou .CSV)
+            links = soup.find_all('a', href=True)
+            csv_link = None
+
+            for link in links:
+                href = link['href']
+                # Filtro simples: deve ser CSV e geralmente tem "Relatorio" ou "Cadop" no nome
+                if href.lower().endswith('.csv') and 'relatorio' in href.lower():
+                    csv_link = href
+                    break
+
+            # Fallback: Se não achou com "relatorio", pega o primeiro CSV que encontrar
+            if not csv_link:
+                for link in links:
+                    if link['href'].lower().endswith('.csv'):
+                        csv_link = link['href']
+                        break
+
+            if not csv_link:
+                print("⚠️ Nenhum arquivo CSV encontrado no diretório do CADOP.")
+                return None
+
+            # 3. Constrói a URL completa e define o nome local
+            url_final = urljoin(url_base_cadop, csv_link)
+            nome_arquivo = "Relatorio_Cadop.csv"
+            caminho_local = os.path.join(data_dir, nome_arquivo)
+
+            # 4. Baixa o arquivo
+            print("\n🔍 Iniciando download do Cadastro de Operadoras (CADOP)...")
+            # Tenta baixar da URL direta oficial
+            if cls._download_file(url_final, caminho_local):
+                return caminho_local
+        
+        except Exception as e:
+            print("⚠️ Falha ao baixar CADOP. Os dados ficarão sem Razão Social correta.")
+        return None
+
     @classmethod
     def baixar_arquivos(cls, urls, data_dir):
         """
@@ -121,21 +174,27 @@ class ANSScraper:
             nome_arquivo = url.split("/")[-1]
             caminho_local = os.path.join(data_dir, nome_arquivo)
 
-            try:
-                print(f"📥 Baixando: {nome_arquivo}...")
-                # Stream=True para lidar com ficheiros grandes sem estourar a RAM
-                with requests.get(url, stream=True, headers=cls.HEADERS, timeout=30) as r:
-                    r.raise_for_status()
-                    with open(caminho_local, 'wb') as f:
-                        # 1MB chunks
-                        for chunk in r.iter_content(chunk_size=1024 * 1024):
-                            if chunk:
-                                f.write(chunk)
+            if cls._download_file(url, caminho_local):
                 baixados.append(caminho_local)
-                print(f"    💾 Guardado em: {data_dir}/{nome_arquivo}")
-            except Exception as e:
-                print(f"❌ Falha ao baixar {nome_arquivo}: {e}")
-
-        print(
-            f"\n✨ Processo finalizado: {len(baixados)} ficheiros na pasta {data_dir}.")
         return baixados
+        
+
+    @classmethod
+    def _download_file(cls, url, destino):
+        """Método auxiliar DRY para downloads."""
+        try:
+            print(f"📥 Baixando: {os.path.basename(destino)}...")
+            # Stream=True para lidar com ficheiros grandes sem estourar a RAM
+            with requests.get(url, stream=True, headers=cls.HEADERS, timeout=30) as r:
+                r.raise_for_status()
+                with open(destino, 'wb') as f:
+                    # 1MB chunks
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)           
+            print(f"    💾 Guardado em: {destino}")
+            return True
+        except Exception as e:
+            print(f"❌ Falha ao baixar {os.path.basename(destino)}: {e}")
+            return False
+

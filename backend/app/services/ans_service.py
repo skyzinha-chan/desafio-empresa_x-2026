@@ -1,96 +1,74 @@
 import os
-import zipfile
-import pandas as pd
-from dotenv import load_dotenv
+import sys
 
-# Importação relativa para os módulos vizinhos
-from ans_scrapper import ANSScraper
-from data_processor import DataProcessor
+# Adiciona o diretório raiz ao path para garantir que o Python encontre os módulos
+# Isso ajuda a evitar erros de "Module not found" dependendo de onde você roda o script
+sys.path.append(os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "../../../")))
 
-load_dotenv()  # Carrega as variáveis do .env
+try:
+    # Tenta importar como módulo do pacote app
+    from app.services.step1_etl import Step1ETL
+    from app.services.step2_transformation import Step2Transformation
+    from app.services.step3_db_ingestion import Step3DBIngestion
+except ImportError:
+    # Fallback para importação direta se estiver rodando scripts soltos (menos comum, mas seguro)
+    from step1_etl import Step1ETL
+    from step2_transformation import Step2Transformation
+    from step3_db_ingestion import Step3DBIngestion
+
 
 
 class ANSService:
     """
-    Serviço Orquestrador: Centraliza configurações e coordena o fluxo ETL.
+    Orquestrador Central do Pipeline.
+    Responsável por executar a Etapa 1 e, se bem-sucedida, a Etapa 2.
     """
 
-    # Buscamos do .env. Se não existir, usamos uma string vazia como fallback
-    BASE_URL = os.getenv("ANS_DATA_SOURCE_URL", "")
-    DATA_DIR = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "../../../data"))
-
-
     @classmethod
-    def consolidar_e_analisar(cls, lista_dfs):
-        """
-        Consolida os dados, trata inconsistências e gera o ZIP final (Item 1.3).
-        """
-        if not lista_dfs:
-            print("⚠️ Sem dados para consolidar.")
+    def executar_pipeline_completo(cls):
+        print("========================================================")
+        print("🏁 INICIANDO PIPELINE DE DADOS DA EMPRESA_X")
+        print("========================================================\n")
+
+        # --- ETAPA 1: ETL (Extração e Consolidação Bruta) ---
+        try:
+            print(">>> EXECUTANDO ETAPA 1: Integração ANS e Consolidação")
+            Step1ETL.execute()
+
+            # Verificação de segurança: Se o arquivo não foi gerado, não adianta ir para a etapa 2
+            arquivo_consolidado = os.path.join(
+                Step1ETL.DATA_DIR, "consolidado_despesas.csv")
+            if not os.path.exists(arquivo_consolidado):
+                print("❌ Erro Crítico: O arquivo consolidado não foi gerado na Etapa 1.")
+                return
+
+        except Exception as e:
+            print(f"❌ Falha fatal na Etapa 1: {e}")
+            return  # Interrompe tudo
+
+        print("\n--------------------------------------------------------\n")
+
+        # --- ETAPA 2: Transformação (Enriquecimento e Agregação) ---
+        try:
+            print(">>> EXECUTANDO ETAPA 2: Transformação e Enriquecimento (CADOP)")
+            Step2Transformation.execute()
+        except Exception as e:
+            print(f"❌ Falha fatal na Etapa 2: {e}")
             return
 
-        print("\n📊 Iniciando consolidação e análise de inconsistências...")
+        try:
+            print(">>> EXECUTANDO ETAPA 3: Ingestão no Banco de Dados")
+            Step3DBIngestion.execute()
+        except Exception as e:
+            print(f"❌ Falha fatal na Etapa 3: {e}")
+            return
 
-        # 1. Juntar todos os DataFrames
-        df_final = pd.concat(lista_dfs, ignore_index=True)
 
-        # --- TRATAMENTO DE INCONSISTÊNCIAS ---
+        print("\n========================================================")
+        print("✨ PIPELINE FINALIZADO COM SUCESSO! ✨")
+        print("========================================================")
 
-        # A. Tratar Valores (Ignorar ou corrigir negativos/zerados)
-        # Decisão técnica: Converter para numérico e filtrar apenas > 0
-        df_final['VALORDESPESAS'] = pd.to_numeric(
-            df_final['VALORDESPESAS'], errors='coerce').fillna(0)
-        iniciais = len(df_final)
-        df_final = df_final[df_final['VALORDESPESAS'] > 0]
-        print(
-            f"  🧹 Valores: Removidas {iniciais - len(df_final)} linhas com valores inválidos ou <= 0.")
 
-        # B. Tratar CNPJs e Razão Social (Conflitos)
-        # Decisão: Manter a primeira Razão Social encontrada para cada CNPJ (Padronização)
-        df_final = df_final.sort_values(by=['CNPJ', 'RAZAOSOCIAL'])
-        df_final['RAZAOSOCIAL'] = df_final.groupby(
-            'CNPJ')['RAZAOSOCIAL'].transform('first')
-
-        # C. Remover Duplicados Reais (Mesmo CNPJ, Ano, Trimestre e Valor)
-        df_final = df_final.drop_duplicates()
-
-        # 2. Gerar o CSV Final
-        csv_path = os.path.join(cls.DATA_DIR, "consolidado_despesas.csv")
-        df_final.to_csv(csv_path, index=False, sep=';', encoding='utf-8-sig')
-
-        # 3. Compactar em ZIP (conforme pedido)
-        zip_final_path = os.path.join(cls.DATA_DIR, "consolidado_despesas.zip")
-        with zipfile.ZipFile(zip_final_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            z.write(csv_path, arcname="consolidado_despesas.csv")
-
-        print(f"✅ Arquivo final gerado: {zip_final_path}")
-        return zip_final_path
-
-            
-# Exemplo simples para teste manual
 if __name__ == "__main__":
-    # 1. Identificar (Passamos a URL como argumento)
-    urls = ANSScraper.identificar_arquivos_trimestrais(ANSService.BASE_URL)
-
-    if urls:
-        # 2. Baixar (Passamos a pasta de destino como argumento)
-        caminhos_zips = ANSScraper.baixar_arquivos(urls, ANSService.DATA_DIR)
-
-        if caminhos_zips:
-            print("\n🧪 Iniciando processamento dos dados...")
-            # 3. Processar (Passamos a pasta de dados para o processador saber onde criar a temp)
-            lista_dataframes = DataProcessor.processar_e_normalizar(
-                caminhos_zips, ANSService.DATA_DIR)
-
-            if lista_dataframes:
-                # 4. Consolidar via SERVICE (onde a função ficou)
-                ANSService.consolidar_e_analisar(lista_dataframes)
-                print(
-                    f"✅ Sucesso: {len(lista_dataframes)} arquivos de despesas foram carregados na memória.")
-                # Aqui você já tem os dados prontos para a Consolidação (Item 1.3)
-            else:
-                print(
-                    "⚠️ Nenhum arquivo de despesas/sinistros foi encontrado dentro dos ZIPs.")
-    else:
-        print("❌ Não foi possível encontrar os links para download.")   
+    ANSService.executar_pipeline_completo()
