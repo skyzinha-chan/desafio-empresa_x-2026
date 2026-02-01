@@ -77,8 +77,7 @@ class DataProcessor:
                                             # Remove pontos da conta (ex: 4.1.1 -> 411) para filtrar
                                             conta_limpa = chunk['CD_CONTA_CONTABIL'].str.replace(
                                                 r'\D', '', regex=True)
-                                            mask = conta_limpa.str.startswith(
-                                                '411', na=False)
+                                            mask = (conta_limpa == '411')
                                             df_filtrado = chunk[mask].copy()
                                         else:
                                             # Fallback: Tenta achar "EVENTO" na descrição
