@@ -1,0 +1,171 @@
+{
+	"info": {
+		"_postman_id": "b7492004-0c3a-4038-9e45-3c22e83d50a7",
+		"name": "EMPRESA_X_Health_Analytics",
+		"description": "Esta coleção contém o conjunto de endpoints da API de Analytics desenvolvida para o desafio técnico da **EMPRESA_X**.\n\n**Escopo do Projeto:**  \nA API disponibiliza dados processados e enriquecidos das Demonstrações Contábeis da ANS dos últimos 3 trimestres de 2025. O backend foi construído com **FastAPI** e utiliza um banco de dados **SQLite** normalizado para garantir alta performance em queries analíticas.\n\n**Destaques Técnicos:**\n\n- **Normalização Contábil:** Os valores de despesas foram filtrados especificamente pela conta '411' para evitar a duplicidade da estrutura hierárquica da ANS.\n    \n- **Eficiência de Busca:** Implementação de busca no servidor (Server-side) e paginação baseada em offset para lidar com a volumetria de dados.\n    \n- **Análise Geo-financeira:** Endpoints preparados para alimentar dashboards com distribuição por UF e KPIs de mercado.\n    \n\n**Instruções:**  \nConfigure a variável de ambiente `base_url` para o endereço onde o serviço está rodando (padrão: `http://localhost:8000`).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "37004234"
+	},
+	"item": [
+		{
+			"name": "Listar Operadoras",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/operadoras?page=1&limit=10",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"operadoras"
+					],
+					"query": [
+						{
+							"key": "page",
+							"value": "1"
+						},
+						{
+							"key": "limit",
+							"value": "10"
+						}
+					]
+				},
+				"description": "**Descrição da Requisição:**\n\n> Este endpoint é utilizado para listar as operadoras de saúde cadastradas na base de dados da ANS. Ele oferece suporte a paginação para otimizar o tráfego de dados e garantir uma experiência fluida no frontend, mesmo lidando com milhares de registros. \n  \n\n**Uso:**\n\n> Realize uma solicitação GET informando os parâmetros de paginação. O sistema retornará um conjunto de dados enriquecidos (Razão Social, CNPJ, UF) e metadados para controle da interface. \n  \n\n#### Requisição\n\n- **Method**: GET\n    \n- **URL**: `{{base_url}/api/operadoras?page=1&limit=10`\n    \n\n#### Resposta\n\nApós uma requisição bem-sucedida, o servidor responde com um status `200 OK` e um objeto JSON contendo os seguintes campos:\n\n- **data**: Lista de objetos contendo os dados básicos das operadoras.\n    \n- **meta**: Objeto de apoio com `total` de registros, `page` atual e `total_pages` calculadas.\n    \n\n**Resposta Esperada (Status 200):**\n\n``` json\n{\n  \"data\": [\n    {\n      \"cnpj\": \"92693118000160\",\n      \"razao_social\": \"BRADESCO SAÚDE S.A.\",\n      \"uf\": \"RJ\",\n      \"modalidade\": \"Seguradora Especializada em Saúde\"\n    }\n  ],\n  \"meta\": {\n    \"total\": 1110,\n    \"page\": 1,\n    \"limit\": 10,\n    \"total_pages\": 111\n  }\n}\n\n ```"
+			},
+			"response": []
+		},
+		{
+			"name": "Buscar Operadora",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/operadoras?search=Bradesco",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"operadoras"
+					],
+					"query": [
+						{
+							"key": "search",
+							"value": "Bradesco"
+						}
+					]
+				},
+				"description": "**Descrição da Requisição:**\n\n> Permite a localização rápida de operadoras específicas utilizando termos de busca. A busca é processada no servidor (Server-side Search), filtrando resultados por Razão Social ou CNPJ de forma parcial. \n  \n\n**Uso:**\n\n> Envie o parâmetro `search` na URL. É ideal para componentes de busca em tempo real na interface web. \n  \n\n#### Requisição\n\n- **Method**: GET\n    \n- **URL**: `{{base_url}}/api/operadoras?search=Bradesco`\n    \n\n**Resposta Esperada (Status 200):**\n\n``` json\n{\n  \"data\": [\n    {\n      \"cnpj\": \"92693118000160\",\n      \"razao_social\": \"BRADESCO SAÚDE S.A.\",\n      \"uf\": \"RJ\",\n      \"modalidade\": \"Seguradora Especializada em Saúde\"\n    }\n  ],\n  \"meta\": {\n    \"total\": 1,\n    \"page\": 1,\n    \"limit\": 10,\n    \"total_pages\": 1\n  }\n}\n\n ```"
+			},
+			"response": []
+		},
+		{
+			"name": "Detalhes Operadora",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/operadoras/92693118000160/despesas",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"operadoras",
+						"92693118000160",
+						"despesas"
+					]
+				},
+				"description": "**Descrição da Requisição:**\n\n> Este endpoint fornece a visão detalhada de uma operadora específica, incluindo seu perfil cadastral completo e o histórico cronológico de despesas com sinistros/eventos. \n  \n\n**Análise Crítica:**\n\n> Os valores exibidos aqui foram normalizados para evitar a duplicidade hierárquica das contas contábeis da ANS, garantindo que o valor apresentado seja o consolidado real do trimestre (Conta 411). \n  \n\n#### Requisição\n\n- **Method**: GET\n    \n- **URL**: `{{base_url}}/api/operadoras/{cnpj}/despesas`\n    \n\n**Resposta Esperada (Status 200):**\n\n``` json\n{\n  \"operadora\": {\n    \"cnpj\": \"92693118000160\",\n    \"registro_ans\": \"005711\",\n    \"razao_social\": \"BRADESCO SAÚDE S.A.\",\n    \"uf\": \"RJ\"\n  },\n  \"despesas\": [\n    { \"ano\": 2025, \"trimestre\": 3, \"valor_despesa\": 24132499192.47 },\n    { \"ano\": 2025, \"trimestre\": 2, \"valor_despesa\": 15559601494.60 }\n  ]\n}\n\n ```"
+			},
+			"response": []
+		},
+		{
+			"name": "Dashboard (KPIs)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/estatisticas",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"estatisticas"
+					]
+				},
+				"description": "**Descrição da Requisição:**\n\n> Endpoint analítico projetado para alimentar dashboards. Ele consolida KPIs financeiros globais, o ranking das maiores operadoras e a distribuição geográfica de gastos por UF. \n  \n\n**Trade-off de Performance:**\n\n> Por ser uma query analítica pesada sobre milhões de registros, este endpoint foi otimizado no backend para realizar cálculos diretos eficientes, atendendo aos requisitos de consistência de dados. \n  \n\n#### Requisição\n\n- **Method**: GET\n    \n- **URL**: `{{base_url}}/api/estatisticas`\n    \n\n**Resposta Esperada (Status 200):**\n\n``` json\n{\n  \"kpis\": {\n    \"total_despesas\": 2602003292042.68,\n    \"media_por_lancamento\": 22968039.79\n  },\n  \"top_operadoras\": [\n    { \"razao_social\": \"BRADESCO SAÚDE S.A.\", \"total\": 308023633370.49 }\n  ],\n  \"distribuicao_uf\": [\n    { \"uf\": \"SP\", \"total\": 916305014606.28 }\n  ]\n}\n\n ```"
+			},
+			"response": []
+		},
+		{
+			"name": "Health Check",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Stores the status in an environment variable\r",
+							"var status = pm.response.json().status;\r",
+							"pm.environment.set(\"healthStatus\", status);\r",
+							"// Stores the status in an environment variable\r",
+							"  var jsonData = pm.response.json();\r",
+							"  pm.environment.set(\"healthStatus\", jsonData.status);\r",
+							"pm.environment.set(\"databaseStatus\", jsonData.database);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/health",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"health"
+					]
+				},
+				"description": "# Endpoint de Verificação de Saúde\n\nEste endpoint é utilizado para verificar a saúde do serviço e do banco de dados. Ele retorna informações sobre o estado atual do sistema, permitindo que os desenvolvedores monitorem a disponibilidade e o funcionamento adequado da aplicação.\n\n## Uso\n\nPara utilizar este endpoint, basta fazer uma solicitação GET para a URL especificada. Não são necessários parâmetros de entrada. A resposta fornecerá um instantâneo do estado do serviço e do banco de dados, que pode ser utilizado para monitoramento e diagnóstico.\n\nCertifique-se de verificar a resposta frequentemente para garantir que o sistema esteja funcionando corretamente.\n\nEste endpoint é usado para realizar uma verificação de integridade no serviço de API. Ele fornece informações sobre o status operacional da API e sua conexão com o banco de dados.\n\n#### Requisição\n\n- **Method**: GET\n    \n- **URL**: `{{base_url}}/api/health`\n    \n\n#### Resposta\n\nApós uma requisição bem-sucedida, o servidor responde com um status `200 OK` e um objeto JSON contendo os seguintes campos:\n\n- **status**: Uma string indicando o status atual da API (por exemplo, \"healthy\", \"unhealthy\").\n    \n- **database**: Uma string indicando o status da conexão com o banco de dados (por exemplo, \"connected\", \"disconnected\").\n    \n\n### Exemplo de Resposta\n\n``` json\n{\n  \"status\": \"healthy\",\n  \"database\": \"connected\"\n}\n\n ```\n\nEste endpoint não requer nenhum parâmetro de entrada e é útil para monitorar a integridade do serviço de API e garantir que o banco de dados esteja acessível."
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	]
+}
