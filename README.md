@@ -39,40 +39,41 @@ Este repositório contém a solução para o teste técnico de estágio da **EMP
 Abaixo estão detalhadas as escolhas realizadas durante o desenvolvimento, conforme solicitado nas instruções do teste:
 
 ### 1. Processamento de Dados (ETL)
-* **Processamento Incremental:** Optei por processamento incremental para lidar com os arquivos da ANS, visando eficiência de memória caso o volume de dados escale.
-* **Normalização:** (Exemplo) Os dados foram normalizados para o formato CSV padrão antes da ingestão no banco.
+* **Processamento Incremental:** Optei por leitura e processamento em streaming (linha a linha) dos arquivos CSV da ANS. Isso previne estouro de memória (OOM), independentemente do tamanho do arquivo.
+* **Filtragem Estrita:** A lógica de captura de despesas utiliza correspondência exata da conta contábil (`411`) para garantir a integridade financeira, evitando subcontas não solicitadas.
 
 ### 2. Banco de Dados
-* **Arquitetura SQL:** Utilizei [PostgreSQL/MySQL] com tabelas [Normalizadas/Desnormalizadas] porque...
-* **Precisão Monetária:** Uso de `DECIMAL` para evitar erros de arredondamento em valores de despesas.
+* **Arquitetura SQL:** Utilizei **SQLite** pela simplicidade de configuração e portabilidade (arquivo local), ideal para testes técnicos, eliminando a necessidade de configurar servidores PostgreSQL externos.
+* **Normalização:** Optei por tabelas **Normalizadas** (`operadoras` e `despesas` separadas) para evitar redundância de dados cadastrais.
+* **Tipagem:** Uso de `REAL/FLOAT` para simplificação no SQLite, com formatação monetária (R$) aplicada na camada de apresentação (Frontend).
 
 ### 3. Backend & API
-* **Framework:** Escolhi **FastAPI** pela performance nativa com operações assíncronas e documentação automática (Swagger).
-* **Paginação:** Implementada via [Offset-based] para facilitar o consumo pelo frontend.
+* **Arquitetura Simplificada (KISS):** Optei por não utilizar ORMs complexos (como SQLAlchemy) ou camadas excessivas (Controllers/Services). A lógica reside nas rotas utilizando **SQL Puro**, garantindo performance máxima e facilidade de leitura para o escopo do teste.
+* **Busca:** Optei por **Server-side Search** (busca no servidor). Filtrar no frontend seria inviável para grandes volumes de dados. A busca no SQL garante escalabilidade.
 
+### 4. Frontend & Infraestrutura
+* **Dockerização:** Configuração completa com `docker-compose`, isolando o ambiente Linux (Alpine) para evitar conflitos de dependências do Node.js comuns no Windows (`node_modules`).
+* **Interface:** Uso de TailwindCSS para estilização rápida e responsiva, com gráficos via Chart.js.
 ---
 
 ## 📂 Arquitetura do Projeto
-O projeto segue princípios de Clean Architecture para garantir escalabilidade:
+O projeto segue uma estrutura modular focada na simplicidade e separação de responsabilidades, eliminando complexidades desnecessárias:
 ```text
 empresa-x-teste/
 ├── 📁 backend                    → Diretório do servidor API (Python/FastAPI).
 │   ├── 📁 app                    → Código principal da aplicação.
 │   │   ├── 📁 api                → Rotas e Endpoints
 │   │   │   ├── 📁 routes         → Definição dos caminhos da API (ex: /api/operadoras).
-│   │   │   ├── 📁 controllers    → Orquestradores: recebem a requisição e chamam o serviço correto.
-│   │   │   └── 📁 middlewares    → Tratamento global de erros e logs de requisições.
 │   │   ├── 📁 services           → O "coração": lógica do ETL da ANS e cálculos de despesas.
-│   │   ├── 📁 models             → Definições de tabelas (SQLAlchemy/SQLModel)
-│   │   ├── 📁 schemas            → Contratos de dados (Pydantic) para validação de entrada/saída.
-│   │   └── 📁 core               → Configurações globais e segurança
 │   ├── 📄 main.py                → Ponto de entrada que inicializa o FastAPI e o Swagger.
 │   ├── 📄 .env                   → Variáveis sensíveis (DB_URL, API_KEYS).
+│   ├── 📄 Dockerfile             → Configuração da imagem Python 3.10.
 │   └── 📄 requirements.txt       → Lista de bibliotecas necessárias (Pandas, FastAPI, SQLAlchemy).
 ├── 📁 frontend                   → Interface web desenvolvida em Vue.js.
 │   ├── 📁 src                    → Código-fonte do front.
 │   │   ├── 📁 components         → Componentes reutilizáveis (Gráficos, Tabelas).
 │   │   └── 📁 services           → Integração com a API do backend (Axios).
+│   ├── 📄 Dockerfile             → Configuração da imagem Node 22 (Alpine).
 │   └── 📄 package.json           → Gerenciador de dependências do Node.js.
 ├── 📁 scripts_sql                → Scripts SQL para criação de tabelas e consultas analíticas.
 ├── 📁 data                       → Repositório local para CSVs processados (ignorado pelo Git).
@@ -83,20 +84,18 @@ empresa-x-teste/
 └── 📄 README.md                  → Documentação completa do projeto.
 ```
 
-## 🎨 Interface e Documentação
+## 🎨 Interface e Funcionalidades
 
-### 🔌 API Documentation (Swagger UI)
-A API foi desenvolvida utilizando **FastAPI**, o que permite a geração automática de documentação interativa. 
-Ao rodar o servidor, você pode testar todos os endpoints diretamente pelo navegador.
+### 1. Dashboard Analítico
+Visão geral com KPIs financeiros e gráficos de distribuição geográfica (Top estados por despesa).
 
-* **URL de Acesso:** `http://localhost:8000/docs`
-* **Vantagens:** Facilita o teste manual e o entendimento dos schemas de entrada e saída.
+### 2. Listagem de Operadoras
+Tabela paginada com busca inteligente (Debounce) por Razão Social ou CNPJ.
+  * Filtros por Abas: "Todas", "Com Registros" e "Sem Registros".
+  * Ordenação: Possibilidade de ordenar por UF.
 
-### 🖥️ Frontend (Vue.js)
-A interface web foi construída para proporcionar uma experiência fluida na visualização dos dados da saúde suplementar:
-* **Tabela Pagina:** Listagem de operadoras com carregamento sob demanda.
-* **Dashboard:** Gráficos interativos (Chart.js) mostrando a distribuição de despesas por estado (UF).
-* **Busca Inteligente:** Filtros dinâmicos por CNPJ ou Razão Social.
+### 3. Detalhes da Operadora
+Página exclusiva exibindo dados cadastrais (Badge de Status, Modalidade) e o histórico trimestral de despesas financeiras.
 
 ---
 
@@ -128,15 +127,27 @@ sequenceDiagram
 * PostgreSQL ou MySQL rodando localmente
 * Node.js (Para o Frontend Vue)
 
-### ## 🛠️ Instalação e Execução
-
-1. Clone o repositório (ou extraia os arquivos)
+### 🔗Clone o repositório (ou extraia os arquivos)
 ```bash
 git clone [https://github.com/skyzinha-chan/NOME-DO-REPO](https://github.com/skyzinha-chan/NOME-DO-REPO)
 cd NOME-DO-REPO
 ```
+A maneira mais fácil e recomendada é utilizando Docker, pois garante que todas as dependências (Python e Node) estejam nas versões corretas.
 
-2. Configure o Backend
+#### Opção A: Via Docker (Recomendado)
+1. Pré-requisito: Ter o Docker Desktop instalado.
+
+2. Na raiz do projeto, execute:
+```bash
+docker-compose up --build
+```
+3. Acesse:
+   * Frontend: http://localhost:5173
+   * API Docs: http://localhost:8000/docs
+
+
+#### Opção B: Execução Manual
+1. Configure o Backend
 ```bash
 # Criar ambiente virtual
 # Windows
@@ -156,17 +167,14 @@ pip install -r backend/requirements.txt
 4. Configure as Variáveis de Ambiente
 Crie um .env na pasta backend/ seguindo o padrão:
 ```text
-DATABASE_URL="postgresql://user:password@localhost:5432/nome_db"
+
 PROJECT_NAME="EMPRESA_X Health Analytics"
 ```
 
 5. Execução
 ```bash
-# Rodar ETL
-python backend/app/services/processar_ans.py
-
-# Rodar API
-uvicorn backend.main:app --reload
+python main.py
+# O ETL rodará automaticamente se o banco não existir.
 
 # Rodar Frontend
 cd frontend && npm install && npm run dev
