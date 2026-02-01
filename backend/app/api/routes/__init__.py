@@ -1,3 +1,4 @@
+# backend/app/api/routes/__init__.py
 from fastapi import APIRouter, HTTPException, Query
 import sqlite3
 import os
@@ -30,7 +31,7 @@ async def health_check():
     """Verifica se a API está online."""
     return {"status": "healthy", "database": "connected" if os.path.exists(DB_PATH) else "missing"}
 
-# --- ROTA 1: Listar Operadoras (Busca + Paginação) ---
+# --- ROTA 1: Listar Operadoras (Busca + Paginação + Filtros + Ordenação) ---
 
 
 @router.get("/operadoras", tags=["Operadoras"])
@@ -38,38 +39,67 @@ async def listar_operadoras(
     search: Optional[str] = Query(
         None, description="Buscar por Razão Social ou CNPJ"),
     page: int = Query(1, ge=1, description="Número da página"),
-    limit: int = Query(10, ge=1, le=100, description="Itens por página")
+    limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    filter_type: str = Query(
+        'todas', description="todas, com_dados, sem_dados"),
+    sort_uf: Optional[str] = Query(None, description="asc, desc")
 ):
     conn = get_db_connection()
     cursor = conn.cursor()
 
     offset = (page - 1) * limit
 
-    # Query Base
-    base_query = "FROM operadoras"
-    where_clause = ""
+    # 1. Construção Dinâmica do WHERE
+    conditions = []
     params = []
 
-    # Filtro de Busca
+    # Filtro de Texto (Busca)
     if search:
-        where_clause = " WHERE razao_social LIKE ? OR cnpj LIKE ?"
+        conditions.append("(razao_social LIKE ? OR cnpj LIKE ?)")
         term = f"%{search}%"
         params.extend([term, term])
 
-    # Contagem Total (para paginação)
-    cursor.execute(f"SELECT COUNT(*) {base_query} {where_clause}", params)
+    # Filtro de Abas (Lógica SQL)
+    if filter_type == 'com_dados':
+        # Retorna apenas quem TEM registro na tabela despesas
+        conditions.append(
+            "cnpj IN (SELECT DISTINCT cnpj_operadora FROM despesas)")
+    elif filter_type == 'sem_dados':
+        # Retorna apenas quem NÃO TEM registro
+        conditions.append(
+            "cnpj NOT IN (SELECT DISTINCT cnpj_operadora FROM despesas)")
+
+    # Junta todas as condições com AND
+    where_clause = ""
+    if conditions:
+        where_clause = " WHERE " + " AND ".join(conditions)
+
+    # 2. Contagem Total (Essencial para a paginação funcionar com filtro)
+    count_sql = f"SELECT COUNT(*) FROM operadoras {where_clause}"
+    cursor.execute(count_sql, params)
     total_records = cursor.fetchone()[0]
 
-    # Busca de Dados Paginados
+    # 3. Definição da Ordenação (ORDER BY)
+    order_clause = "ORDER BY razao_social ASC"  # Padrão
+
+    if sort_uf == 'asc':
+        order_clause = "ORDER BY uf ASC, razao_social ASC"
+    elif sort_uf == 'desc':
+        order_clause = "ORDER BY uf DESC, razao_social ASC"
+
+    # 4. Busca Final Paginada
     sql = f"""
         SELECT cnpj, razao_social, uf, modalidade 
-        {base_query} {where_clause}
-        ORDER BY razao_social 
+        FROM operadoras
+        {where_clause}
+        {order_clause}
         LIMIT ? OFFSET ?
     """
-    params.extend([limit, offset])
 
-    cursor.execute(sql, params)
+    # Adiciona params de limite e offset no final da lista
+    query_params = params + [limit, offset]
+
+    cursor.execute(sql, query_params)
     operadoras = [dict(row) for row in cursor.fetchall()]
 
     conn.close()
@@ -80,7 +110,7 @@ async def listar_operadoras(
             "total": total_records,
             "page": page,
             "limit": limit,
-            "total_pages": (total_records + limit - 1) // limit
+            "total_pages": (total_records + limit - 1) // limit if total_records > 0 else 1
         }
     }
 
