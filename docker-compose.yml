@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: empresa_x_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mapeia a pasta 'data' do seu computador para '/data' dentro do container
+      # Isso é ESSENCIAL para o SQLite funcionar e persistir os dados
+      - ./data:/data
+    environment:
+      - DATABASE_URL=sqlite:////data/empresa_x.db
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: empresa_x_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      # Hot-reload: espelha seu código local para dentro do container
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
