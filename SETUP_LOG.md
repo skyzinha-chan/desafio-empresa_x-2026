@@ -145,3 +145,39 @@ git commit -m "📝 docs(readme): documentação principal e guia de setup
 - Adição do SETUP_LOG.md para rastreio do histórico de inicialização.
 - Inclusão de diagramas Mermaid para visualização do fluxo de dados."
 ```
+
+## Passo 6: Inicialização e Configuração do Frontend (Vue.js)
+
+Com o backend estruturado, execute estes comandos para configurar a interface moderna com Vue 3, Vite e Tailwind CSS:
+
+```bash
+# 1. Criar o scaffold do projeto usando Vite
+npm create vite@latest frontend -- --template vue
+
+# 2. Entrar no diretório e instalar as dependências do ecossistema Vue
+cd frontend
+npm install
+
+# 3. Instalar bibliotecas de suporte (Comunicação, Gráficos e Ícones)
+# Axios: Requisições HTTP
+# Chart.js + Vue-Chartjs: Visualização de dados (Item 4.3 do desafio)
+# Lucide-vue-next: Biblioteca de ícones modernos
+npm install axios chart.js vue-chartjs lucide-vue-next
+
+# 4. Instalar Framework de Estilização (Tailwind CSS)
+npm install -D tailwindcss postcss autoprefixer
+
+# 5. Inicializar as configurações do Tailwind
+npx tailwindcss init -p
+
+npm run dev
+```
+
+## Passo 8: Preparação da Entrega Final (Compactação)
+
+Para garantir que o avaliador receba um arquivo leve e organizado, execute o comando de compactação ignorando as pastas de dependências (`node_modules` e `venv`), que devem ser instaladas pelo próprio avaliador.
+
+### No Git Bash ou Linux (Recomendado):
+```bash
+# Gera o ZIP final ignorando binários pesados e pastas de ambiente
+zip -r Teste_Talita_Mendonca.zip . -x "**/node_modules/*" "**/venv/*" "**/.git/*" "**/__pycache__/*" "frontend/dist/*"
