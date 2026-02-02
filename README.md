@@ -16,6 +16,8 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white">
   <img alt="Vue.js" src="https://img.shields.io/badge/Vue.js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white">
+
 </p>
 
 <p align="center">
@@ -126,6 +128,7 @@ sequenceDiagram
 * Python 3.10 ou superior instalado.
 * PostgreSQL ou MySQL rodando localmente
 * Node.js (Para o Frontend Vue)
+* Docker Desktop instalado.
 
 ### 🔗Clone o repositório (ou extraia os arquivos)
 ```bash
@@ -135,13 +138,11 @@ cd NOME-DO-REPO
 A maneira mais fácil e recomendada é utilizando Docker, pois garante que todas as dependências (Python e Node) estejam nas versões corretas.
 
 #### Opção A: Via Docker (Recomendado)
-1. Pré-requisito: Ter o Docker Desktop instalado.
-
-2. Na raiz do projeto, execute:
+1. Na raiz do projeto, execute:
 ```bash
 docker-compose up --build
 ```
-3. Acesse:
+2. Acesse:
    * Frontend: http://localhost:5173
    * API Docs: http://localhost:8000/docs
 
@@ -162,6 +163,9 @@ python -m venv venv
 3. Instale as Dependências
 ```bash
 pip install -r backend/requirements.txt
+
+# Opcional: Se desejar reprocessar os dados da ANS do zero:
+# python -m app.services.ans_service
 ```
 
 4. Configure as Variáveis de Ambiente
@@ -174,7 +178,6 @@ PROJECT_NAME="EMPRESA_X Health Analytics"
 5. Execução
 ```bash
 python main.py
-# O ETL rodará automaticamente se o banco não existir.
 
 # Rodar Frontend
 cd frontend && npm install && npm run dev
@@ -186,6 +189,16 @@ Acesse a documentação automática (Swagger) em: http://localhost:8000/docs ou 
 curl -X GET "http://localhost:8000/api/operadoras?page=1&limit=10" \
      -H "accept: application/json"
 ```
+
+## 📊 Queries Analíticas (SQL)
+Conforme solicitado na seção 3.4 do desafio, os scripts SQL para responder às perguntas analíticas encontram-se no arquivo: 📂 `scripts_sql/queries_analiticas.sql`
+
+As queries respondem:
+
+1. Top 5 operadoras com maior crescimento de despesas.
+2. Distribuição de despesas por UF.
+3. Operadoras com despesas acima da média.
+
 
 ## 🧑‍💻 Autora
 
