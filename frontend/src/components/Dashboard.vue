@@ -44,12 +44,12 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
       
-      <div class="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 flex flex-col">
+      <div class="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 flex flex-col self-start">
         <h3 class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
           <span class="w-2 h-6 bg-blue-600 rounded-full"></span>
           Distribuição por UF
         </h3>
-        <div class="h-80 relative w-full">
+        <div class="h-96 relative w-full">
           <div v-if="loading" class="h-full flex items-center justify-center">
              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
@@ -60,6 +60,7 @@
         </div>
       </div>
 
+    <div class="space-y-8">
       <div class="bg-white p-6 rounded-2xl shadow-lg border border-slate-100">
         <h3 class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
           <span class="w-2 h-6 bg-amber-500 rounded-full"></span>
@@ -79,8 +80,8 @@
                 {{ index + 1 }}
               </div>
               
-              <div>
-                <p class="font-bold text-slate-700 text-sm md:text-base line-clamp-1">{{ op.razao_social }}</p>
+              <div class="min-w-0">
+                <p class="font-bold text-slate-700 text-xs md:text-sm truncate">{{ op.razao_social }}</p>
                 <div class="flex items-center gap-2 mt-1">
                   <span class="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-md font-medium">{{ op.uf }}</span>
                   <span class="text-xs text-slate-400 hidden sm:inline">• Registro Ativo</span>
@@ -88,7 +89,7 @@
               </div>
             </div>
 
-            <div class="text-right">
+            <div class="text-right shrink-0 ml-2">
               <span class="block font-bold text-slate-800 group-hover:text-blue-700 transition-colors">
                 {{ formatCurrency(op.total) }}
               </span>
@@ -97,8 +98,39 @@
         </ul>
       </div>
 
+      <div class="bg-white p-6 rounded-2xl shadow-lg border border-slate-100">
+          <h3 class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <span class="w-2 h-6 bg-emerald-500 rounded-full"></span>
+            Maior Crescimento (%)
+          </h3>
+          
+          <div v-if="loading" class="space-y-4">
+             <div v-for="i in 5" :key="i" class="h-12 bg-slate-50 rounded-lg animate-pulse"></div>
+          </div>
+
+          <ul v-else class="space-y-3">
+            <li v-for="(op, index) in stats.top_crescimento" :key="op.razao_social" 
+                class="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 group">
+              <div class="flex items-center gap-3 overflow-hidden">
+                <div class="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-emerald-50 text-emerald-600 text-xs font-bold rounded-full">
+                  {{ index + 1 }}
+                </div>
+                <div class="min-w-0">
+                  <p class="font-bold text-slate-700 text-xs md:text-sm truncate" :title="op.razao_social">{{ op.razao_social }}</p>
+                  <p class="text-[10px] text-slate-400 uppercase font-bold">{{ op.uf }}</p>
+                </div>
+              </div>
+              <div class="text-right shrink-0 ml-2">
+                <span class="block font-bold text-emerald-600 text-sm bg-emerald-50 px-2 py-0.5 rounded-lg">
+                  +{{ op.crescimento_pct }}%
+                </span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
-  </div>
+    </div>
 </template>
 
 <script setup>
@@ -115,7 +147,8 @@ const loading = ref(true)
 const stats = reactive({
   kpis: { total_despesas: 0, media_por_lancamento: 0 },
   top_operadoras: [],
-  distribuicao_uf: []
+  distribuicao_uf: [],
+  top_crescimento: []
 })
 const chartData = ref({ labels: [], datasets: [] })
 

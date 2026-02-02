@@ -78,6 +78,7 @@
           <tr>
             <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">CNPJ</th>
             <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase w-1/2">Razão Social</th>
+            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase hidden md:table-cell">Modalidade</th>
             
             <th 
               @click="toggleSort"
@@ -106,6 +107,11 @@
               <div class="text-sm font-bold text-slate-700 group-hover:text-blue-700 transition-colors">
                 {{ op.razao_social }}
               </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap hidden md:table-cell">
+              <span class="text-xs font-medium text-slate-600 truncate max-w-[150px] block" :title="op.modalidade">
+                {{ op.modalidade }}
+              </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 shadow-sm">
