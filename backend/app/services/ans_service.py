@@ -57,6 +57,8 @@ class ANSService:
             print(f"❌ Falha fatal na Etapa 2: {e}")
             return
 
+        print("\n--------------------------------------------------------\n")
+        # --- ETAPA 3: Ingestão no Banco de Dados ---
         try:
             print(">>> EXECUTANDO ETAPA 3: Ingestão no Banco de Dados")
             Step3DBIngestion.execute()

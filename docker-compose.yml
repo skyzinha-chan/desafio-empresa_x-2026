@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: empresa_x_db
+    environment:
+      - POSTGRES_USER=user_ans
+      - POSTGRES_PASSWORD=senha_secreta_ans
+      - POSTGRES_DB=empresa_x
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user_ans -d empresa_x"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      
   backend:
     build: ./backend
     container_name: empresa_x_backend
@@ -11,7 +29,11 @@ services:
       # Isso é ESSENCIAL para o SQLite funcionar e persistir os dados
       - ./data:/data
     environment:
-      - DATABASE_URL=sqlite:////data/empresa_x.db
+      # Nova string de conexão para Postgres
+      - DATABASE_URL=postgresql://user_ans:senha_secreta_ans@db:5432/empresa_x
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -26,3 +48,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  postgres_data:

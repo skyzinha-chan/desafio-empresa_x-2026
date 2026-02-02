@@ -90,9 +90,9 @@ class Step2Transformation:
         df_merged['VALORDESPESAS'] = pd.to_numeric(df_merged['VALORDESPESAS'], errors='coerce').fillna(0)
         
         agregado = df_merged.groupby(['RAZAO_FINAL', 'UF'])['VALORDESPESAS'].agg(
-            TOTAL=('sum'),
-            MEDIA=('mean'),
-            DESVIO=('std')
+            TOTAL=('sum'),  # Total de despesas
+            MEDIA=('mean'),  # Média por trimestre
+            DESVIO=('std')  # Desvio padrão
         ).reset_index().sort_values(by='TOTAL', ascending=False)
 
         # 8. Salvar
