@@ -25,8 +25,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Mapeia a pasta 'data' do seu computador para '/data' dentro do container
-      # Isso é ESSENCIAL para o SQLite funcionar e persistir os dados
+      # Mapeia a pasta 'data' para persistir os arquivos CSV baixados (ETL)
+      # Evita download repetitivo ao reiniciar os containers
       - ./data:/data
     environment:
       # Nova string de conexão para Postgres

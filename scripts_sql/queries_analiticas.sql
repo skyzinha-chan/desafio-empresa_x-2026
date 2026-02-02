@@ -34,7 +34,8 @@ LIMIT 5;
 SELECT 
     o.uf,
     SUM(d.valor_despesa) as total_despesas,
-    ROUND(AVG(d.valor_despesa), 2) as media_por_lancamento
+    -- Total do Estado / Número de Operadoras distintas
+    ROUND(SUM(d.valor_despesa) / NULLIF(COUNT(DISTINCT o.cnpj), 0), 2) as media_por_operadora
 FROM despesas d
 JOIN operadoras o ON d.cnpj_operadora = o.cnpj
 WHERE o.uf IS NOT NULL
@@ -64,9 +65,12 @@ performance_operadora AS (
     GROUP BY d.cnpj_operadora, d.ano, d.trimestre, m.media_mercado
 )
 SELECT 
+    o.razao_social,
     p.cnpj_operadora,
     COUNT(*) as qtd_trimestres_acima
 FROM performance_operadora p
+JOIN operadoras o ON p.cnpj_operadora = o.cnpj
 WHERE p.total_op > p.media_mercado
-GROUP BY p.cnpj_operadora
+GROUP BY p.cnpj_operadora, o.razao_social
 HAVING COUNT(*) >= 2; -- Filtro final: Pelo menos 2 trimestres
+ORDER BY qtd_trimestres_acima DESC;

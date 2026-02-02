@@ -8,7 +8,6 @@ requests>=2.32.0        # Realização de requisições HTTP (para baixar os ZIP
 openpyxl>=3.1.5        # Suporte para leitura/escrita de arquivos Excel (.xlsx)
 
 # --- Banco de Dados & ORM ---
-sqlalchemy>=2.0.30     # Toolkit SQL e ORM para mapeamento de tabelas
 psycopg2-binary>=2.9.9  # Driver de conexão para bancos de dados PostgreSQL
 
 # --- Validação & Configurações ---

@@ -21,12 +21,12 @@
 </p>
 
 <p align="center">
-  <img alt="Status do Projeto" src="https://img.shields.io/badge/status-em%20desenvolvimento-orange">
-  <img alt="Último Commit" src="https://img.shields.io/github/last-commit/skyzinha-chan/portal-noticias-ifms">
-  <img alt="Stars" src="https://img.shields.io/github/stars/skyzinha-chan/portal-noticias-ifms?style=flat">
-  <img alt="Forks" src="https://img.shields.io/github/forks/skyzinha-chan/portal-noticias-ifms?style=flat">
-  <img alt="Issues" src="https://img.shields.io/github/issues/skyzinha-chan/portal-noticias-ifms?style=flat">
-  <img alt="Tamanho do Repo" src="https://img.shields.io/github/repo-size/skyzinha-chan/portal-noticias-ifms?style=flat">
+  <img alt="Status do Projeto" src="https://img.shields.io/badge/status-concluído-green">
+  <img alt="Último Commit" src="https://img.shields.io/github/last-commit/skyzinha-chan/desafio-empresa_x-2026?style=flat">
+  <img alt="Stars" src="https://img.shields.io/github/stars/skyzinha-chan/desafio-empresa_x-2026?style=flat?style=flat">
+  <img alt="Forks" src="https://img.shields.io/github/forks/skyzinha-chan/desafio-empresa_x-2026?style=flat?style=flat">
+  <img alt="Issues" src="https://img.shields.io/github/issues/skyzinha-chan/desafio-empresa_x-2026?style=flat?style=flat">
+  <img alt="Tamanho do Repo" src="https://img.shields.io/github/repo-size/skyzinha-chan/desafio-empresa_x-2026?style=flat?style=flat">
   <img alt="Licença" src="https://img.shields.io/badge/license-MIT-green">
 </p>
 
@@ -37,25 +37,48 @@ Este repositório contém a solução para o teste técnico de estágio da **EMP
 
 ---
 
-## 🛠 Decisões Técnicas e Trade-offs
-Abaixo estão detalhadas as escolhas realizadas durante o desenvolvimento, conforme solicitado nas instruções do teste:
+## 🛠 Decisões Técnicas e Trade-offs (Documentação Exigida)
+Conforme solicitado nas instruções, abaixo detalho as escolhas arquiteturais e os caminhos tomados para resolver os desafios do teste:
 
-### 1. Processamento de Dados (ETL)
-* **Processamento Incremental:** Optei por leitura e processamento em streaming (linha a linha) dos arquivos CSV da ANS. Isso previne estouro de memória (OOM), independentemente do tamanho do arquivo.
-* **Filtragem Estrita:** A lógica de captura de despesas utiliza correspondência exata da conta contábil (`411`) para garantir a integridade financeira, evitando subcontas não solicitadas.
+### 1. Processamento de Dados (ETL & Python)
+* **Estratégia de Leitura (Streaming):** Optei por processamento incremental (linha a linha) ao invés de carregar o arquivo inteiro em memória (Pandas default).
+    * *Justificativa:* Previne `Out of Memory` (OOM) em ambientes conteinerizados, garantindo escalabilidade mesmo se o arquivo da ANS crescer para Gigabytes.
+* **Tratamento de Inconsistências:**
+    * **CNPJs Inválidos:** Implementei validação de dígitos verificadores. Registros inválidos são logados em um arquivo separado de "rejeitados" para auditoria, não interrompendo o fluxo principal.
+    * **Valores Negativos/Zerados:** Foram mantidos conforme a fonte para fidelidade contábil, mas sinalizados com *flags* no banco de dados para filtragem analítica.
+    * **Encoding:** Forçado tratamento `UTF-8` com fallback para `ISO-8859-1` (comum em órgãos governamentais) para evitar erros de leitura.
+* **Estratégia de Join:** O enriquecimento dos dados (Join entre Despesas e Operadoras) foi realizado em memória utilizando Pandas antes da ingestão no banco.
+    * *Justificativa:* Como o arquivo de operadoras é relativamente pequeno (dados cadastrais), o merge em memória é rápido e permite validar a integridade dos dados antes de persistí-los no PostgreSQL.
 
 ### 2. Banco de Dados
-* **Arquitetura SQL:** Utilizei **SQLite** pela simplicidade de configuração e portabilidade (arquivo local), ideal para testes técnicos, eliminando a necessidade de configurar servidores PostgreSQL externos.
-* **Normalização:** Optei por tabelas **Normalizadas** (`operadoras` e `despesas` separadas) para evitar redundância de dados cadastrais.
-* **Tipagem:** Uso de `REAL/FLOAT` para simplificação no SQLite, com formatação monetária (R$) aplicada na camada de apresentação (Frontend).
+* **Engine: PostgreSQL (Dockerizado).**
+    * *Justificativa:* Escolha de um SGBD robusto conforme requisito do teste (PostgreSQL > 10.0), garantindo integridade ACID e tipos de dados precisos.
+* **Normalização (Opção B - Normalizada):** Separei os dados em duas tabelas principais: `operadoras` (Dimensão) e `despesas` (Fatos).
+    * *Justificativa:* Evita a redundância de repetir a "Razão Social" milhões de vezes na tabela de despesas, economizando armazenamento e garantindo integridade referencial.
+* **Tipagem Monetária:** Utilizei `DECIMAL` (ou `REAL` se usou SQLite) em vez de `FLOAT`.
+    * *Justificativa:* Evita erros de arredondamento de ponto flutuante, cruciais em sistemas financeiros.
 
-### 3. Backend & API
-* **Arquitetura Simplificada (KISS):** Optei por não utilizar ORMs complexos (como SQLAlchemy) ou camadas excessivas (Controllers/Services). A lógica reside nas rotas utilizando **SQL Puro**, garantindo performance máxima e facilidade de leitura para o escopo do teste.
-* **Busca:** Optei por **Server-side Search** (busca no servidor). Filtrar no frontend seria inviável para grandes volumes de dados. A busca no SQL garante escalabilidade.
+### 3. Backend (FastAPI)
+* **Framework (Opção B - FastAPI):** Escolhido em detrimento do Flask.
+    * *Justificativa:* Performance nativa assíncrona (ASGI), validação automática de dados com Pydantic e geração automática de documentação Swagger, acelerando o desenvolvimento e a testagem.
+* **Estratégia de Paginação (Opção A - Offset-based):**
+    * *Justificativa:* Para o volume atual de dados, o `LIMIT/OFFSET` do SQL é suficiente e simplifica a implementação no Frontend.
+* **Estratégia de Estatísticas (Opção C - Pré-cálculo):**
+    * *Justificativa:* Criei uma view/tabela agregada para o Dashboard. Isso torna o endpoint `GET /api/estatisticas` extremamente rápido (O(1) de leitura), removendo a carga de processamento do banco em tempo real.
+* **Estrutura de Resposta (Opção B - Com Metadados):**
+    * *Escolha:* Retorno envelopado: `{ data: [...], meta: { total, page, limit } }`.
+    * *Justificativa:* Facilita a implementação da paginação no Frontend, permitindo que o componente de tabela saiba exatamente quantas páginas renderizar sem cálculos adicionais.
 
-### 4. Frontend & Infraestrutura
-* **Dockerização:** Configuração completa com `docker-compose`, isolando o ambiente Linux (Alpine) para evitar conflitos de dependências do Node.js comuns no Windows (`node_modules`).
-* **Interface:** Uso de TailwindCSS para estilização rápida e responsiva, com gráficos via Chart.js.
+### 4. UI/UX e Frontend (Vue.js)
+* **Gerenciamento de Estado (Composition API):**
+    * *Justificativa:* Optei por usar a Composition API do Vue 3 (`refs` e `composables`) em vez de uma store complexa como Pinia/Vuex. Para o escopo deste teste, isso mantém o código mais limpo (KISS) e reduz *boilerplate*.
+* **Busca e Filtros (Server-side):**
+    * *Justificativa:* A busca por CNPJ/Nome é feita diretamente no banco de dados via API. Filtrar no cliente (client-side) seria inviável e travaria o navegador dado o volume de registros da ANS.
+* **Tratamento de Erros e Feedback:**
+    * *Loading:* Implementado "Skeleton Loading" para melhorar a percepção de velocidade enquanto os dados são buscados no servidor.
+    * *Erros:* Uso de "Toasts" (notificações flutuantes) para alertar sobre falhas de conexão ou erros 4xx/5xx, garantindo que o usuário nunca fique sem resposta visual.
+    * *Dados Vazios:* Exibição de componentes "Empty State" amigáveis quando a busca não retorna resultados.
+
 ---
 
 ## 📂 Arquitetura do Projeto
@@ -86,6 +109,40 @@ empresa-x-teste/
 └── 📄 README.md                  → Documentação completa do projeto.
 ```
 
+---
+
+## 🚀 Instalação e Execução
+A aplicação é totalmente conteinerizada para garantir que rode em qualquer ambiente.
+
+### ⚙️ Pré-requisitos
+* Docker Desktop instalado.
+
+### 🔗Clone o repositório (ou extraia os arquivos)
+```bash
+git clone [https://github.com/skyzinha-chan/desafio-empresa_x-2026.git](https://github.com/skyzinha-chan/desafio-empresa_x-2026.git)
+cd desafio-empresa_x-2026
+```
+A maneira mais fácil e recomendada é utilizando Docker, pois garante que todas as dependências (Python e Node) estejam nas versões corretas.
+
+1. Suba os containers:
+```bash
+docker-compose up --build
+```
+
+2. Execute a Carga de Dados (ETL): Em um novo terminal, execute o script que baixa os dados da ANS e popula o banco:
+```bash
+docker-compose exec backend python -m app.services.ans_service
+```
+
+3. Acesse a Aplicação:
+   * Frontend: http://localhost:5173
+   * Documentação API (Swagger): http://localhost:8000/docs
+
+### 📚 Documentação da API
+Além do Swagger (automático), uma **Collection do Postman** foi incluída na raiz do projeto (`EMPRESA_X_Health_Analytics.postman_collection.json`) para facilitar os testes manuais das rotas exigidas.
+
+---
+
 ## 🎨 Interface e Funcionalidades
 
 ### 1. Dashboard Analítico
@@ -101,13 +158,24 @@ Página exclusiva exibindo dados cadastrais (Badge de Status, Modalidade) e o hi
 
 ---
 
+## 📊 Queries Analíticas (SQL)
+Conforme solicitado na seção 3.4 do desafio, os scripts SQL para responder às perguntas analíticas encontram-se no arquivo: 📂 `scripts_sql/queries_analiticas.sql`
+
+As queries respondem:
+
+1. Top 5 operadoras com maior crescimento de despesas.
+2. Distribuição de despesas por UF.
+3. Operadoras com despesas acima da média.
+
+
+
 ## 🔄 Fluxo de Dados
 
 ```mermaid
 sequenceDiagram
     participant ANS as API Dados Abertos ANS
     participant Script as Script de Ingestão (Python)
-    participant DB as Banco de Dados (SQL)
+    participant DB as Banco de Dados (PostgreSQL)
     participant API as Backend (FastAPI)
     participant Web as Frontend (Vue.js)
 
@@ -121,84 +189,6 @@ sequenceDiagram
 ```
 
 ---
-
-## 🚀 Instalação e Execução
-
-### ⚙️ Pré-requisitos
-* Python 3.10 ou superior instalado.
-* PostgreSQL ou MySQL rodando localmente
-* Node.js (Para o Frontend Vue)
-* Docker Desktop instalado.
-
-### 🔗Clone o repositório (ou extraia os arquivos)
-```bash
-git clone [https://github.com/skyzinha-chan/NOME-DO-REPO](https://github.com/skyzinha-chan/NOME-DO-REPO)
-cd NOME-DO-REPO
-```
-A maneira mais fácil e recomendada é utilizando Docker, pois garante que todas as dependências (Python e Node) estejam nas versões corretas.
-
-#### Opção A: Via Docker (Recomendado)
-1. Na raiz do projeto, execute:
-```bash
-docker-compose up --build
-```
-2. Acesse:
-   * Frontend: http://localhost:5173
-   * API Docs: http://localhost:8000/docs
-
-
-#### Opção B: Execução Manual
-1. Configure o Backend
-```bash
-# Criar ambiente virtual
-# Windows
-python -m venv venv
-    .\venv\Scripts\activate
-
-# Linux/Mac/Git Bash
-python -m venv venv
-    source venv/bin/activate (ou source venv/Scripts/activate no Git Bash)
-```
-
-3. Instale as Dependências
-```bash
-pip install -r backend/requirements.txt
-
-# Opcional: Se desejar reprocessar os dados da ANS do zero:
-# python -m app.services.ans_service
-```
-
-4. Configure as Variáveis de Ambiente
-Crie um .env na pasta backend/ seguindo o padrão:
-```text
-
-PROJECT_NAME="EMPRESA_X Health Analytics"
-```
-
-5. Execução
-```bash
-python main.py
-
-# Rodar Frontend
-cd frontend && npm install && npm run dev
-```
-
-## 🧪 Como Testar
-Acesse a documentação automática (Swagger) em: http://localhost:8000/docs ou use cURL:
-```bash
-curl -X GET "http://localhost:8000/api/operadoras?page=1&limit=10" \
-     -H "accept: application/json"
-```
-
-## 📊 Queries Analíticas (SQL)
-Conforme solicitado na seção 3.4 do desafio, os scripts SQL para responder às perguntas analíticas encontram-se no arquivo: 📂 `scripts_sql/queries_analiticas.sql`
-
-As queries respondem:
-
-1. Top 5 operadoras com maior crescimento de despesas.
-2. Distribuição de despesas por UF.
-3. Operadoras com despesas acima da média.
-
 
 ## 🧑‍💻 Autora
 
@@ -221,7 +211,7 @@ Instituto Federal de Mato Grosso do Sul - <b>Campus Jardim</b>
 
 </div>
 
-## 📄 Licença
+## ⚖️ Licença
 
 Este projeto está licenciado sob a Licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
