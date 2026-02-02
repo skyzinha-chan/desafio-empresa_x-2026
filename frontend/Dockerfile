@@ -2,7 +2,7 @@
 FROM node:22-alpine
 
 # Define diretório de trabalho
-WORKDIR /app
+WORKDIR /frontend
 
 # Copia os arquivos de dependências primeiro (para cache do Docker ser eficiente)
 COPY package*.json ./

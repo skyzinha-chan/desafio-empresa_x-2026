@@ -12,7 +12,20 @@ load_dotenv()
 
 class Step2Transformation:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    DATA_DIR = os.path.join(BASE_DIR, "../../../data")
+    # --- LÓGICA HÍBRIDA (DOCKER vs LOCAL) ---
+    # Tenta voltar 3 níveis (Estrutura Local: backend/app/services -> Raiz)
+    possible_root_local = os.path.abspath(os.path.join(BASE_DIR, "../../../"))
+    # Tenta voltar 2 níveis (Estrutura Docker: app/services -> /app)
+    possible_root_docker = os.path.abspath(os.path.join(BASE_DIR, "../../"))
+
+    # Verifica qual caminho contém a pasta 'data'. Se achar a local, usa a local.
+    # Caso contrário, assume que estamos no Docker.
+    if os.path.exists(os.path.join(possible_root_local, "data")):
+        ROOT_DIR = possible_root_local
+    else:
+        ROOT_DIR = possible_root_docker
+
+    DATA_DIR = os.path.join(ROOT_DIR, "data")
     URL_CADOP = os.getenv("ANS_CADASTRO_OPERADORAS_URL", "")
 
     @classmethod

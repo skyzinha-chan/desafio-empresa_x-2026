@@ -2,7 +2,7 @@
 FROM python:3.10-slim
 
 # Define o diretório de trabalho dentro do container
-WORKDIR /app
+WORKDIR /backend
 
 # Variáveis de ambiente para o Python não gerar arquivos .pyc e logs em tempo real
 ENV PYTHONDONTWRITEBYTECODE=1

@@ -28,6 +28,9 @@ services:
       # Mapeia a pasta 'data' para persistir os arquivos CSV baixados (ETL)
       # Evita download repetitivo ao reiniciar os containers
       - ./data:/data
+      - ./scripts_sql:/scripts_sql
+    env_file:
+      - ./backend/.env
     environment:
       # Nova string de conexão para Postgres
       - DATABASE_URL=postgresql://user_ans:senha_secreta_ans@db:5432/empresa_x

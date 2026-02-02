@@ -11,9 +11,19 @@ logger = logging.getLogger(__name__)
 
 class Step3DBIngestion:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    DATA_DIR = os.path.join(BASE_DIR, "../../../data")
-    # Caminho dos scripts SQL
-    SQL_DIR = os.path.join(BASE_DIR, "../../../scripts_sql")
+    # --- LÓGICA HÍBRIDA (DOCKER vs LOCAL) ---
+    possible_root_local = os.path.abspath(os.path.join(BASE_DIR, "../../../"))
+    possible_root_docker = os.path.abspath(os.path.join(BASE_DIR, "../../"))
+
+    # Verifica onde está a pasta 'scripts_sql' (que sempre existe na raiz)
+    if os.path.exists(os.path.join(possible_root_local, "scripts_sql")):
+        ROOT_DIR = possible_root_local
+    else:
+        ROOT_DIR = possible_root_docker
+
+    DATA_DIR = os.path.join(ROOT_DIR, "data")
+    SQL_DIR = os.path.join(ROOT_DIR, "scripts_sql")
+    # ----------------------------------------
 
     # Arquivos CSV
     FILE_CONSOLIDADO = os.path.join(DATA_DIR, "consolidado_despesas.csv")
@@ -24,6 +34,7 @@ class Step3DBIngestion:
 
     @classmethod
     def execute(cls):
+        """Executa o pipeline completo da Etapa 3."""
         print("\n🚀 [ETAPA 3] Ingestão no PostgreSQL...")
 
         if not os.path.exists(cls.FILE_CONSOLIDADO) or not os.path.exists(cls.FILE_CADOP):
@@ -40,12 +51,8 @@ class Step3DBIngestion:
         # 3. Processar Despesas (Brutas)
         cls.processar_e_inserir_despesas()
 
-        # 4. Processar Agregados (NOVO - Cumpre Item 3.1 e 3.3)
-        if os.path.exists(cls.FILE_AGREGADO):
-            cls.processar_e_inserir_agregados()
-        else:
-            logger.warning(
-                "⚠️ Arquivo despesas_agregadas.csv não encontrado (Pulei essa etapa).")
+        # 4. Inserir Agregados 
+        cls.processar_e_inserir_agregados()
 
         print("✅ [FIM ETAPA 3] Banco de dados populado com sucesso!")
 
@@ -56,18 +63,17 @@ class Step3DBIngestion:
         print("🏗️ Verificando estrutura do banco...")
         conn = get_db_connection()
         if not conn:
-                return
+            return
 
         try:
-            with open(cls.FILE_CREATE_TABLES, 'r', encoding='utf-8') as f:
+            with open(cls.FILE_CREATE_TABLES, "r", encoding="utf-8") as f:
                 sql_script = f.read()
 
-            cursor = conn.cursor()
-            cursor.execute(sql_script)
-            conn.commit()
-            logger.info("✅ Tabelas criadas/verificadas com sucesso!")
+            with conn.cursor() as cursor:
+                cursor.execute(sql_script)
+                conn.commit()
+                logger.info("🚀 Tabelas criadas/verificadas com sucesso!")
         except Exception as e:
-            conn.rollback()
             logger.error(f"❌ Erro ao criar tabelas: {e}")
         finally:
             conn.close()
