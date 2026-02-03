@@ -129,7 +129,6 @@
                   {{ data.operadora.modalidade }}
                 </p>
               </div>
-              
 
               <div
                 class="bg-slate-50 p-3.5 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors"
@@ -175,41 +174,84 @@
         </div>
       </div>
 
-<div v-if="data.despesas.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-  <div class="bg-white p-5 rounded-2xl shadow-lg border border-slate-100 flex items-center justify-between">
-    <div>
-      <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Acumulado (Ano)</p>
-      <p class="text-2xl font-extrabold text-slate-800 mt-1">{{ formatCurrency(kpis.total) }}</p>
-    </div>
-    <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-    </div>
-  </div>
+      <div
+        v-if="data.despesas.length > 0"
+        class="grid grid-cols-1 md:grid-cols-2 gap-4"
+      >
+        <div
+          class="bg-white p-5 rounded-2xl shadow-lg border border-slate-100 flex items-center justify-between"
+        >
+          <div>
+            <p
+              class="text-xs font-bold text-slate-400 uppercase tracking-wider"
+            >
+              Total Acumulado (Ano)
+            </p>
+            <p class="text-2xl font-extrabold text-slate-800 mt-1">
+              {{ formatCurrency(kpis.total) }}
+            </p>
+          </div>
+          <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              ></path>
+            </svg>
+          </div>
+        </div>
 
-  <div class="bg-white p-5 rounded-2xl shadow-lg border border-slate-100 flex items-center justify-between">
-    <div>
-      <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Média Trimestral</p>
-      <p class="text-2xl font-extrabold text-slate-800 mt-1">{{ formatCurrency(kpis.media) }}</p>
-    </div>
-    <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-    </div>
-  </div>
-
-</div>
-
+        <div
+          class="bg-white p-5 rounded-2xl shadow-lg border border-slate-100 flex items-center justify-between"
+        >
+          <div>
+            <p
+              class="text-xs font-bold text-slate-400 uppercase tracking-wider"
+            >
+              Média Trimestral
+            </p>
+            <p class="text-2xl font-extrabold text-slate-800 mt-1">
+              {{ formatCurrency(kpis.media) }}
+            </p>
+          </div>
+          <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              ></path>
+            </svg>
+          </div>
+        </div>
+      </div>
 
       <div
         class="w-full bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden"
       >
-      
-<div class="p-6 border-b border-slate-100 bg-white">
+        <div class="p-6 border-b border-slate-100 bg-white">
           <h3 class="text-xl font-bold text-slate-800 flex items-center gap-3">
             Histórico Financeiro
-            <span
+            <span v-if="!isDummy"
               class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200"
             >
               Despesas com Eventos (411)
+            </span>
+            <span v-else class="text-xs font-bold text-red-600 bg-red-100 px-3 py-1 rounded-full border border-red-200">
+              Registros Órfãos Individuais
             </span>
           </h3>
         </div>
@@ -227,6 +269,9 @@
                   class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider"
                 >
                   Período
+                </th>
+                <th v-if="isDummy" class="px-6 py-4 text-xs font-bold text-blue-600 uppercase tracking-wider bg-blue-50">
+                  Reg. ANS Original
                 </th>
                 <th
                   class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right"
@@ -251,6 +296,9 @@
                     ></span>
                     {{ item.trimestre }}º Trimestre
                   </span>
+                </td>
+                <td v-if="isDummy" class="px-6 py-4 font-mono font-bold text-blue-600 bg-blue-50/50">
+                  {{ item.registro_ans_original || 'N/D' }}
                 </td>
                 <td class="px-6 py-4 text-right">
                   <span class="font-mono font-bold text-slate-800 text-lg">
@@ -292,6 +340,12 @@ const props = defineProps(["cnpj"]);
 const data = ref(null);
 const loading = ref(true);
 
+// Verifica se é um CNPJ Dummy
+const isDummy = computed(() => {
+  return props.cnpj === '00000000000000' || String(props.cnpj).includes('00000000');
+} );
+
+// Função de Formatação de Moeda
 const formatCurrency = (val) => {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -319,6 +373,7 @@ const kpis = computed(() => {
     (acc, curr) => acc + Number(curr.valor_despesa),
     0,
   );
+  // Se for dummy (15 registros), divide por 15. Se for normal (3 trimestres), divide por 3.
   const media = total / data.value.despesas.length;
   return { total, media };
 });

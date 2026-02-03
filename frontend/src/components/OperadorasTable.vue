@@ -44,6 +44,12 @@
           >
             Sem Registros
           </button>
+          <button 
+            @click="changeTab('desconhecidas')"
+            :class="['pb-3 px-2 text-sm font-bold border-b-2 whitespace-nowrap transition-colors', activeTab === 'desconhecidas' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700']"
+          >
+            Desconhecidas
+          </button>
         </div>
 
         <div class="flex items-center gap-3 pb-2 w-full md:w-auto justify-end">
