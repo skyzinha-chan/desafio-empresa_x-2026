@@ -29,6 +29,7 @@ services:
       # Evita download repetitivo ao reiniciar os containers
       - ./data:/data
       - ./scripts_sql:/scripts_sql
+      - ./backend:/backend
     env_file:
       - ./backend/.env
     environment:
@@ -46,8 +47,8 @@ services:
       - "5173:5173"
     volumes:
       # Hot-reload: espelha seu código local para dentro do container
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend:/frontend
+      - /frontend/node_modules
     depends_on:
       - backend
     restart: unless-stopped

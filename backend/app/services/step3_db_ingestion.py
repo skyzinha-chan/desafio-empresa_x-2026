@@ -32,6 +32,9 @@ class Step3DBIngestion:
     # Arquivo SQL
     FILE_CREATE_TABLES = os.path.join(SQL_DIR, "create_tables.sql")
 
+    CNPJ_DUMMY = "00000000000000"
+    
+
     @classmethod
     def execute(cls):
         """Executa o pipeline completo da Etapa 3."""
@@ -44,6 +47,9 @@ class Step3DBIngestion:
 
         # 1. Garantir que as tabelas existem (Lê o arquivo .sql e executa)
         cls.criar_tabelas()
+
+        # [NOVO] Garante que existe a operadora para receber despesas órfãs
+        cls._criar_operadora_dummy()
 
         # 2. Processar Operadoras 
         cls.processar_e_inserir_operadoras()
@@ -58,6 +64,28 @@ class Step3DBIngestion:
 
 
     @classmethod
+    def _criar_operadora_dummy(cls):
+        conn = get_db_connection()
+        if not conn:
+                return
+        try:
+            cursor = conn.cursor()
+            # Insere a operadora "Lixeira" para despesas órfãs
+            cursor.execute("""
+                INSERT INTO operadoras (cnpj, razao_social, modalidade, uf)
+                VALUES (%s, 'OPERADORA DESCONHECIDA / INATIVA', 'DESCONHECIDA', 'BR')
+                ON CONFLICT (cnpj) DO NOTHING;
+            """, (cls.CNPJ_DUMMY,))
+            conn.commit()
+            print("👻 Operadora 'Dummy' (Desconhecida) verificada.")
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ Erro ao criar dummy: {e}")
+        finally:
+            conn.close()
+
+
+    @classmethod
     def criar_tabelas(cls):
         """Lê o arquivo create_tables.sql e executa no banco"""
         print("🏗️ Verificando estrutura do banco...")
@@ -66,7 +94,7 @@ class Step3DBIngestion:
             return
 
         try:
-            with open(cls.FILE_CREATE_TABLES, "r", encoding="utf-8") as f:
+            with open(cls.FILE_CREATE_TABLES, "r", encoding="utf-8-sig") as f:
                 sql_script = f.read()
 
             with conn.cursor() as cursor:
@@ -86,7 +114,7 @@ class Step3DBIngestion:
             # Lendo CADOP com tratamento de encoding para corrigir o "SAÚDE"
             # 1. Resiliência de Encoding
             try:
-                cadop = pd.read_csv(cls.FILE_CADOP, sep=';', encoding='utf-8', dtype=str, quotechar='"')
+                cadop = pd.read_csv(cls.FILE_CADOP, sep=';', encoding='utf-8-sig', dtype=str, quotechar='"')
             except UnicodeDecodeError:
                 logger.warning("⚠️ Falha com UTF-8, tentando Latin-1...")
                 cadop = pd.read_csv(cls.FILE_CADOP, sep=';', encoding='latin-1', dtype=str, quotechar='"')
@@ -233,6 +261,10 @@ class Step3DBIngestion:
             df_final['ano'] = df_desp['ANO']
             df_final['trimestre'] = df_desp['TRIMESTRE']
 
+            # Guardamos o REG_ANS original antes que ele possa ser substituído pelo Dummy
+            df_final['codigo_origem'] = df_desp['cnpj_operadora'].str.lstrip(
+                '0')
+
             # --- FILTRAR DESPESAS ÓRFÃS ---
             conn = get_db_connection()
             if not conn:
@@ -245,22 +277,63 @@ class Step3DBIngestion:
             valid_cnpjs = set(row[0] for row in cursor.fetchall())
             conn.close()
 
-            # Filtra: Mantém apenas despesas cujo CNPJ está no conjunto de válidos
-            total_antes = len(df_final)
-            df_final = df_final[df_final['cnpj_operadora'].isin(valid_cnpjs)]
-            total_depois = len(df_final)
+            # Identifica os Órfãos (quem tem REG_ANS mas não tem CNPJ cadastrado)
+            mask_orfams = ~df_final['cnpj_operadora'].isin(valid_cnpjs)
+            qtd_orfams = mask_orfams.sum()
 
-            diff = total_antes - total_depois
-            if diff > 0:
+            if qtd_orfams > 0:
+                # 1. Auditoria: Identifica quais são os IDs problemáticos
+                ids_orfaos = df_final.loc[mask_orfams,
+                                          'cnpj_operadora'].unique()
                 logger.warning(
-                    f"⚠️ {diff} despesas ignoradas pois a operadora não está no CADOP (Órfãs).")
+                    f"⚠️ {qtd_orfams} despesas órfãs detectadas para os registros: {ids_orfaos}")
+                df_log_orfaos = df_final[mask_orfams].copy()
+                cls._salvar_em_quarentena(df_log_orfaos)
 
-            # Inserir apenas as válidas
+                print(
+                    f"⚠️ {qtd_orfams} despesas órfãs redirecionadas e logadas em quarentena.")
+                # 2. Resiliência: Trata o dado para não quebrar a inserção no banco
+                df_final.loc[mask_orfams, 'cnpj_operadora'] = cls.CNPJ_DUMMY
+                
+
+            # Agora inserimos TUDO (pois todos os CNPJs agora são válidos: ou reais ou dummy)
             cls._bulk_insert_despesas(df_final)
             print(f"    ✅ {len(df_final)} registros de despesas inseridos.")
 
         except Exception as e:
             print(f"❌ Erro no processamento das Despesas: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+    @classmethod
+    def _salvar_em_quarentena(cls, df_orfaos):
+        """
+            Salva registros que falharam na integridade referencial para auditoria.
+            Segue o princípio de segregação de falhas.
+            """
+        if df_orfaos.empty:
+                return
+
+        quarentena_path = os.path.join(
+            cls.DATA_DIR, "quarentena_despesas_orfas.csv")
+
+        # Se o arquivo já existir, anexa sem repetir o cabeçalho (mode='a')
+        file_exists = os.path.isfile(quarentena_path)
+
+        try:
+            df_orfaos.to_csv(
+                quarentena_path,
+                mode='a',
+                index=False,
+                sep=';',
+                encoding='utf-8-sig',
+                header=not file_exists
+            )
+            logger.info(
+                f"📁 Registros órfãos salvos em quarentena: {quarentena_path}")
+        except Exception as e:
+            logger.error(f"❌ Falha ao salvar arquivo de quarentena: {e}")
 
 
     @classmethod
@@ -277,16 +350,27 @@ class Step3DBIngestion:
             query = """
                 INSERT INTO despesas (
                     data_evento, cnpj_operadora, cd_conta_contabil, 
-                    descricao, valor_despesa, ano, trimestre
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s);
+                    descricao, valor_despesa, ano, trimestre, codigo_origem
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
             """
-            dados = df.where(pd.notnull(df), None).values.tolist()
+            # [SEGURANÇA] Definimos a lista exata para bater com os %s da query acima
+            cols_ordem = [
+                'data_evento', 'cnpj_operadora', 'cd_conta_contabil',
+                'descricao', 'valor_despesa', 'ano', 'trimestre', 'codigo_origem'
+            ]
+
+            # Filtramos o DF para ter apenas essas colunas, NA ORDEM CERTA.
+            # O .where converte NaN (Not a Number) para None (NULL do SQL)
+            dados = df[cols_ordem].where(pd.notnull(df), None).values.tolist()
+
             cursor.executemany(query, dados)
             conn.commit()
             logger.info("✅ Despesas inseridas com sucesso!")
         except Exception as e:
             conn.rollback()
             logger.error(f"❌ Erro SQL Despesas: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             conn.close()
 

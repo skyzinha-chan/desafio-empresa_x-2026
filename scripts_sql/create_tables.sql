@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS despesas (
     descricao VARCHAR(255),
     valor_despesa DECIMAL(18, 2), -- DECIMAL evita erros de arredondamento de moeda
     data_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Aqui guardamos o REG_ANS original (Ex: "421723")
+    -- Útil apenas quando não conseguimos achar o CNPJ (Orfãos)
+    codigo_origem VARCHAR(50),
     
     CONSTRAINT fk_operadora FOREIGN KEY (cnpj_operadora) REFERENCES operadoras(cnpj)
 );
