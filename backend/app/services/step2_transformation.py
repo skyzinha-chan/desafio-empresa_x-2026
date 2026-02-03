@@ -49,7 +49,8 @@ class Step2Transformation:
 
         # 3. Carregar e Preparar CADOP para Join
         print("📚 Preparando Cadastro de Operadoras...")
-        cadop = pd.read_csv(caminho_cadop, sep=';', encoding='latin-1', dtype=str, quotechar='"')
+        cadop = pd.read_csv(caminho_cadop, sep=';',
+                            encoding='utf-8-sig', dtype=str, quotechar='"')
         cadop.columns = [c.upper().strip() for c in cadop.columns]
 
         # Identificar colunas do CADOP

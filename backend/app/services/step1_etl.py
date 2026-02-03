@@ -64,7 +64,7 @@ class Step1ETL:
 
         # Salva o arquivo "Bruto/Consolidado"
         csv_path = os.path.join(cls.DATA_DIR, "consolidado_despesas.csv")
-        df_final.to_csv(csv_path, index=False, sep=';', encoding='utf-8')
+        df_final.to_csv(csv_path, index=False, sep=';', encoding='utf-8-sig')
         
         zip_path = os.path.join(cls.DATA_DIR, "consolidado_despesas.zip")
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
