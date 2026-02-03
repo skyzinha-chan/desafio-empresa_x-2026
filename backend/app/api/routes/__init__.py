@@ -7,7 +7,10 @@ from app.db.connection import get_db_connection
 
 router = APIRouter()
 
+# Constante para o CNPJ da Operadora "Unknown/Dummy"
+CNPJ_DUMMY = "00000000000000"
 
+# --- ROTA DE SAÚDE DA API ---
 @router.get("/health", tags=["System"])
 async def health_check():
     """Verifica se a API está online."""
@@ -27,9 +30,12 @@ async def listar_operadoras(
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página"),
     filter_type: str = Query(
-        'todas', description="todas, com_dados, sem_dados"),
+        'todas', description="todas, com_dados, sem_dados, desconhecidas"),
     sort_uf: Optional[str] = Query(None, description="asc, desc")
 ):
+    """
+    Lista operadoras com suporte a busca, paginação, filtros e ordenação.
+    """
     conn = get_db_connection()
     if not conn:
         raise HTTPException(
@@ -43,21 +49,31 @@ async def listar_operadoras(
         conditions = ["1=1"]  # Base verdadeira para concatenar ANDs
         params = []
 
-        # Filtro de Texto (Busca) - ADAPTADO PARA POSTGRES (ILIKE)
+        # --- Filtro de Texto (Busca) - POSTGRES (ILIKE)  ---
         if search:
             conditions.append("(razao_social ILIKE %s OR cnpj ILIKE %s)")
             term = f"%{search}%"
             params.extend([term, term])
-        # Filtro de Abas (Lógica SQL)
+            
+        # --- LÓGICA DE FILTROS  ---
         if filter_type == 'com_dados':
-            # Retorna apenas quem TEM registro na tabela despesas
+            # Retorna quem TEM registro E NÃO É a dummy
             conditions.append(
-                "cnpj IN (SELECT DISTINCT cnpj_operadora FROM despesas)")
+                f"cnpj IN (SELECT DISTINCT cnpj_operadora FROM despesas) AND cnpj != '{CNPJ_DUMMY}'")
+            
         elif filter_type == 'sem_dados':
-            # Retorna apenas quem NÃO TEM registro
+            # Retorna quem NÃO TEM registro E NÃO É a dummy
             conditions.append(
-                "cnpj NOT IN (SELECT DISTINCT cnpj_operadora FROM despesas)")
+                f"cnpj NOT IN (SELECT DISTINCT cnpj_operadora FROM despesas) AND cnpj != '{CNPJ_DUMMY}'")
+            
+        elif filter_type == 'desconhecidas':
+            # [NOVO] Retorna APENAS a operadora dummy (que segura as despesas órfãs)
+            conditions.append(f"cnpj = '{CNPJ_DUMMY}'")
 
+        else:  # 'todas'
+            # Retorna todas, mas ESCONDE a dummy para não poluir a lista geral
+            conditions.append(f"cnpj != '{CNPJ_DUMMY}'")
+            
         where_clause = " WHERE " + " AND ".join(conditions)
 
         # 2. Contagem Total (Essencial para a paginação funcionar com filtro)
@@ -108,6 +124,9 @@ async def listar_operadoras(
 
 @router.get("/operadoras/{cnpj}/despesas", tags=["Operadoras"], status_code=200)
 async def obter_detalhes_operadora(cnpj: str):
+    """
+    Retorna detalhes cadastrais e histórico de despesas de uma operadora.
+    """
     conn = get_db_connection()
     if not conn:
         raise HTTPException(status_code=500, detail="Erro de conexão.")
@@ -124,13 +143,32 @@ async def obter_detalhes_operadora(cnpj: str):
                 status_code=404, detail="Operadora não encontrada")
 
         # 2. Histórico de Despesas
-        cursor.execute("""
-            SELECT ano, trimestre, SUM(valor_despesa) as valor_despesa 
-            FROM despesas 
-            WHERE cnpj_operadora = %s 
-            GROUP BY ano, trimestre
-            ORDER BY ano DESC, trimestre DESC
-        """, (cnpj,))
+        if cnpj == CNPJ_DUMMY:
+            # --- VISÃO DETALHADA PARA DESCONHECIDAS ---
+            # Mostra o 'codigo_origem' (REG_ANS) para sabermos quem são os 15 registros
+            cursor.execute("""
+                SELECT 
+                    ano, 
+                    trimestre, 
+                    codigo_origem as registro_ans_original, 
+                    SUM(valor_despesa) as valor_despesa 
+                FROM despesas 
+                WHERE cnpj_operadora = %s 
+                GROUP BY ano, trimestre, codigo_origem
+                ORDER BY ano DESC, trimestre DESC, valor_despesa DESC
+            """, (cnpj,))
+        else:
+            # VISÃO PADRÃO (Agrupada por Trimestre)
+            cursor.execute("""
+                SELECT 
+                    ano, 
+                    trimestre, 
+                    SUM(valor_despesa) as valor_despesa 
+                FROM despesas 
+                WHERE cnpj_operadora = %s 
+                GROUP BY ano, trimestre
+                ORDER BY ano DESC, trimestre DESC
+            """, (cnpj,))
 
         despesas = cursor.fetchall()
         conn.close()
@@ -159,30 +197,34 @@ async def obter_estatisticas():
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # 1. Total Geral e Média (Agregando a tabela já agregada)
+        # 1. KPIs Globais (Apenas de operadoras válidas)
+        # Somamos os totais e tiramos a média das médias trimestrais
         cursor.execute("""
             SELECT 
                 SUM(total_despesas) as total_geral,
                 AVG(media_trimestral) as media_geral
             FROM despesas_agregadas
+            WHERE razao_social != 'OPERADORA DESCONHECIDA / INATIVA'
+              AND uf != 'BR'
         """)
         kpis = cursor.fetchone()
 
-        # 2. Top 5 Operadoras (Muito mais rápido que fazer JOIN na tabela gigante)
+        # 2. Top 5 Operadoras (EXCLUI o Dummy para o ranking ser justo)
         cursor.execute("""
-            SELECT o.razao_social, o.uf, SUM(d.valor_despesa) as total
-            FROM despesas d
-            JOIN operadoras o ON d.cnpj_operadora = o.cnpj
-            GROUP BY o.cnpj, o.razao_social, o.uf
-            ORDER BY total DESC
+            SELECT razao_social, uf, total_despesas as total, desvio_padrao
+            FROM despesas_agregadas
+            WHERE razao_social != 'OPERADORA DESCONHECIDA / INATIVA'
+            ORDER BY total_despesas DESC
             LIMIT 5
         """)
         top_5 = cursor.fetchall()
 
-        # 3. Distribuição por UF (Soma simples dos pré-calculados)
+        # 3. Distribuição por UF (Remove a UF 'BR' ou o nome da Dummy)
         cursor.execute("""
             SELECT uf, SUM(total_despesas) as total
             FROM despesas_agregadas
+            WHERE uf != 'BR' 
+              AND razao_social != 'OPERADORA DESCONHECIDA / INATIVA'
             GROUP BY uf
             ORDER BY total DESC
             LIMIT 5
@@ -190,6 +232,7 @@ async def obter_estatisticas():
         top_ufs = cursor.fetchall()
 
         # --- Query 1 (Maior Crescimento % entre 1º e Último Tri) ---
+        # 4. Top Crescimento (EXCLUI o Dummy) 
         cursor.execute("""
             WITH limites AS (
                 SELECT MIN(ano * 10 + trimestre) as periodo_ini, 
@@ -202,6 +245,7 @@ async def obter_estatisticas():
                     SUM(CASE WHEN (d.ano * 10 + d.trimestre) = l.periodo_ini THEN d.valor_despesa ELSE 0 END) as vlr_inicial,
                     SUM(CASE WHEN (d.ano * 10 + d.trimestre) = l.periodo_fim THEN d.valor_despesa ELSE 0 END) as vlr_final
                 FROM despesas d, limites l
+                WHERE d.cnpj_operadora != %s
                 GROUP BY d.cnpj_operadora
             )
             SELECT 
@@ -213,82 +257,20 @@ async def obter_estatisticas():
             WHERE v.vlr_inicial > 0
             ORDER BY crescimento_pct DESC
             LIMIT 5
-        """)
+        """, (CNPJ_DUMMY,))
         top_crescimento = cursor.fetchall()
 
         return {
             "kpis": {
                 "total_despesas": kpis['total_geral'] or 0,
-                "media_por_lancamento": kpis['media_geral'] or 0
+                "media_trimestral_media": kpis['media_geral'] or 0
             },
             "top_operadoras": top_5,
             "distribuicao_uf": top_ufs,
-            "top_crescimento": top_crescimento  # <--- ADICIONE ESTE CAMPO NO RETORNO
+            "top_crescimento": top_crescimento  
         }
     except Exception as e:
         print(f"Erro estatisticas: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
-
-
-'''
-@router.get("/estatisticas", tags=["Dashboard"])
-async def obter_estatisticas():
-    """
-    Retorna KPIs gerais para o Dashboard (Item 4.2 do desafio).
-    Trade-off: Calculado em tempo real (Query Direta). Para volumes maiores, usaríamos outra abordagem.
-    """
-    conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="Erro de conexão.")
-
-    try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        # KPI 1: Total de Despesas
-        cursor.execute("SELECT SUM(valor_despesa) as total FROM despesas")
-        res_total = cursor.fetchone()
-        total_geral = res_total['total'] if res_total and res_total['total'] else 0
-
-        # KPI 2: Média por Trimestre (Aproximada pela média de lançamentos ou agregada)
-        cursor.execute("SELECT AVG(valor_despesa) as media FROM despesas")
-        res_media = cursor.fetchone()
-        media_geral = res_media['media'] if res_media and res_media['media'] else 0
-
-        # KPI 3: Top 5 Operadoras com maiores despesas
-        cursor.execute("""
-            SELECT o.razao_social, o.uf, SUM(d.valor_despesa) as total
-            FROM despesas d
-            JOIN operadoras o ON d.cnpj_operadora = o.cnpj
-            GROUP BY o.cnpj, o.razao_social, o.uf
-            ORDER BY total DESC
-            LIMIT 5
-        """)
-        top_5 = cursor.fetchall()
-
-        # KPI 4: Distribuição por UF (Top 5 Estados)
-        cursor.execute("""
-            SELECT o.uf, SUM(d.valor_despesa) as total
-            FROM despesas d
-            JOIN operadoras o ON d.cnpj_operadora = o.cnpj
-            GROUP BY o.uf
-            ORDER BY total DESC
-            LIMIT 5
-        """)
-        top_ufs = cursor.fetchall()
-
-        return {
-            "kpis": {
-                "total_despesas": total_geral,
-                "media_por_lancamento": media_geral
-            },
-            "top_operadoras": top_5,
-            "distribuicao_uf": top_ufs
-        }
-    except Exception as e:
-        print(f"Erro estatisticas: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        conn.close()
-
-'''
